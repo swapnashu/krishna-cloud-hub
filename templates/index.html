@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Cloud-ready Python FastAPI Web Service & File Manager deployable on Render, Railway, and Fly.io">
-    <title>Cloud File Hub | FastAPI</title>
+    <meta name="description" content="Advanced Cloud File Manager & Web IDE deployable on Render, Railway, and Fly.io">
+    <title>Advanced Cloud File Hub & IDE</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -17,16 +17,16 @@
         <!-- Header -->
         <header class="header">
             <div class="brand">
-                <div class="logo">🐍</div>
+                <div class="logo">⚡</div>
                 <div>
-                    <h1>Cloud File Hub</h1>
-                    <p class="subtitle">Python FastAPI • Deploy Ready for Render, Railway & Fly.io</p>
+                    <h1>Advanced Cloud File Hub & IDE</h1>
+                    <p class="subtitle">Python FastAPI • Multi-Cloud Ready (Render, Railway, Fly.io)</p>
                 </div>
             </div>
             <div class="cloud-badges">
-                <span class="badge render" id="badge-render">Render Ready</span>
-                <span class="badge railway" id="badge-railway">Railway Ready</span>
-                <span class="badge fly" id="badge-fly">Fly.io Ready</span>
+                <span class="badge render">Render</span>
+                <span class="badge railway">Railway</span>
+                <span class="badge fly">Fly.io</span>
             </div>
         </header>
 
@@ -42,7 +42,7 @@
             </div>
             <div class="stat-card">
                 <span class="stat-label">Storage Used</span>
-                <div class="stat-value" id="stat-storage">0.00 MB</div>
+                <div class="stat-value" id="stat-storage">0 B</div>
             </div>
             <div class="stat-card">
                 <span class="stat-label">Port / Uptime</span>
@@ -50,41 +50,152 @@
             </div>
         </div>
 
-        <!-- Main Content -->
-        <main class="main-content">
-            <!-- Upload Area -->
-            <section class="card upload-section">
-                <h2>Upload Files</h2>
-                <div class="drop-zone" id="drop-zone">
-                    <div class="drop-icon">☁️</div>
-                    <p>Drag & drop files here or <label for="file-input" class="file-browse-btn">Browse Files</label></p>
+        <!-- Toolbar Section -->
+        <div class="card toolbar-card">
+            <div class="toolbar-top">
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="openModal('new-folder-modal')">📁 New Folder</button>
+                    <button class="btn btn-primary" onclick="openModal('new-file-modal')">📝 New File</button>
+                    <label for="file-input" class="btn btn-accent">☁️ Upload Files</label>
                     <input type="file" id="file-input" multiple hidden>
-                    <span class="upload-hint">Supports documents, images, code, and archives</span>
                 </div>
-                <div class="upload-progress" id="upload-progress" style="display: none;">
-                    <div class="progress-bar" id="progress-bar"></div>
+                
+                <div class="search-box">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="search-input" placeholder="Search files & folders..." oninput="handleSearch()">
                 </div>
-            </section>
 
-            <!-- File List -->
-            <section class="card files-section">
-                <div class="files-header">
-                    <h2>Managed Files</h2>
-                    <button class="btn btn-secondary" id="refresh-btn" onclick="fetchFiles()">Refresh</button>
+                <div class="view-toggles">
+                    <button class="icon-btn active" id="view-list-btn" onclick="setViewMode('list')" title="List View">📋</button>
+                    <button class="icon-btn" id="view-grid-btn" onclick="setViewMode('grid')" title="Grid View">🔲</button>
                 </div>
-                <div id="file-list-container" class="file-list">
-                    <div class="empty-state">Loading files...</div>
+            </div>
+
+            <!-- Filter Tags -->
+            <div class="filter-tags">
+                <button class="filter-pill active" onclick="setFilter('all', this)">All Items</button>
+                <button class="filter-pill" onclick="setFilter('code', this)">💻 Code</button>
+                <button class="filter-pill" onclick="setFilter('images', this)">🖼️ Images</button>
+                <button class="filter-pill" onclick="setFilter('media', this)">🎬 Media</button>
+                <button class="filter-pill" onclick="setFilter('docs', this)">📄 Documents</button>
+                <button class="filter-pill" onclick="setFilter('archives', this)">📦 Archives</button>
+            </div>
+        </div>
+
+        <!-- Breadcrumb Navigation & Batch Bar -->
+        <div class="nav-bar">
+            <div class="breadcrumbs" id="breadcrumbs">
+                <!-- Dynamic breadcrumbs rendered here -->
+            </div>
+            <div class="batch-bar" id="batch-bar" style="display: none;">
+                <span id="batch-count">0 items selected</span>
+                <button class="btn btn-small btn-secondary" onclick="downloadSelectedZip()">📦 Download ZIP</button>
+                <button class="btn btn-small btn-danger" onclick="deleteSelectedItems()">🗑️ Delete Selected</button>
+            </div>
+        </div>
+
+        <!-- Main Workspace Grid/List -->
+        <main class="main-content">
+            <!-- Drop Target Overlay -->
+            <div class="drop-zone-wrapper card" id="drop-zone-wrapper">
+                <div class="drop-zone" id="drop-zone">
+                    <p>Drag & drop files anywhere to upload to current directory</p>
                 </div>
-            </section>
+            </div>
+
+            <!-- File Explorer Container -->
+            <div class="card explorer-card">
+                <div class="explorer-header">
+                    <div class="select-all-box">
+                        <input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this)">
+                        <label for="select-all-checkbox">Select All</label>
+                    </div>
+                    <button class="btn btn-secondary btn-small" onclick="fetchDirectoryContents()">🔄 Refresh</button>
+                </div>
+
+                <div id="explorer-body" class="file-list-view">
+                    <div class="empty-state">Loading directory...</div>
+                </div>
+            </div>
         </main>
 
-        <!-- API Reference Banner -->
         <footer class="footer">
-            <p>API Endpoint Active: <a href="/docs" target="_blank" class="api-link">View Swagger UI Docs (/docs)</a> • Health check: <a href="/healthz" target="_blank" class="api-link">/healthz</a></p>
+            <p>API Endpoint: <a href="/docs" target="_blank" class="api-link">Swagger Docs (/docs)</a> • Health: <a href="/healthz" target="_blank" class="api-link">/healthz</a></p>
         </footer>
     </div>
 
-    <!-- Notification Toast Container -->
+    <!-- Modals -->
+
+    <!-- New Folder Modal -->
+    <div class="modal-overlay" id="new-folder-modal">
+        <div class="modal-card">
+            <h3>📁 Create New Folder</h3>
+            <input type="text" id="new-folder-name" class="modal-input" placeholder="Folder name (e.g. documents)">
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('new-folder-modal')">Cancel</button>
+                <button class="btn btn-primary" onclick="submitCreateFolder()">Create Folder</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New File Modal -->
+    <div class="modal-overlay" id="new-file-modal">
+        <div class="modal-card">
+            <h3>📝 Create New Text File</h3>
+            <input type="text" id="new-file-name" class="modal-input" placeholder="File name (e.g. script.py, index.js)">
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('new-file-modal')">Cancel</button>
+                <button class="btn btn-primary" onclick="submitCreateFile()">Create File</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Code Editor Modal -->
+    <div class="modal-overlay" id="editor-modal">
+        <div class="modal-card modal-large">
+            <div class="editor-header">
+                <div>
+                    <h3 id="editor-title">Editing: file.txt</h3>
+                    <span class="editor-subtext" id="editor-path">uploads/file.txt</span>
+                </div>
+                <div class="editor-actions">
+                    <button class="btn btn-accent" onclick="saveEditorContent()">💾 Save Changes</button>
+                    <button class="btn btn-secondary" onclick="closeModal('editor-modal')">Close</button>
+                </div>
+            </div>
+            <div class="editor-container">
+                <textarea id="code-editor" class="code-textarea" spellcheck="false"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- Media Preview Modal -->
+    <div class="modal-overlay" id="preview-modal">
+        <div class="modal-card modal-large">
+            <div class="preview-header">
+                <h3 id="preview-title">File Preview</h3>
+                <button class="btn btn-secondary" onclick="closeModal('preview-modal')">Close</button>
+            </div>
+            <div class="preview-content" id="preview-content-body">
+                <!-- Dynamic Image, Audio, Video preview -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Rename Modal -->
+    <div class="modal-overlay" id="rename-modal">
+        <div class="modal-card">
+            <h3>✏️ Rename Item</h3>
+            <input type="text" id="rename-new-name" class="modal-input" placeholder="New name">
+            <input type="hidden" id="rename-old-path">
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('rename-modal')">Cancel</button>
+                <button class="btn btn-primary" onclick="submitRename()">Rename</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
     <div id="toast-container" class="toast-container"></div>
 
     <script src="/static/js/app.js"></script>

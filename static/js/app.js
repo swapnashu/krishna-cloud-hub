@@ -1,83 +1,354 @@
+// State Management
+let currentPath = "";
+let currentItems = [];
+let selectedPaths = new Set();
+let viewMode = "list";
+let activeFilter = "all";
+let searchQuery = "";
+let currentEditingPath = "";
+
 document.addEventListener('DOMContentLoaded', () => {
     fetchSystemInfo();
-    fetchFiles();
-    setupUpload();
+    fetchDirectoryContents(currentPath);
+    setupUploadHandlers();
 });
 
 async function fetchSystemInfo() {
     try {
         const res = await fetch('/api/info');
-        if (!res.ok) throw new Error('Failed to fetch system info');
+        if (!res.ok) throw new Error('Failed system info request');
         const data = await res.json();
         
         document.getElementById('stat-status').textContent = 'Online 🟢';
         document.getElementById('stat-files').textContent = data.total_files;
-        document.getElementById('stat-storage').textContent = `${data.total_storage_mb} MB`;
+        document.getElementById('stat-storage').textContent = data.total_storage_formatted;
         document.getElementById('stat-uptime').textContent = `:${data.port} | ${data.uptime}`;
     } catch (err) {
         document.getElementById('stat-status').textContent = 'Offline 🔴';
-        document.getElementById('stat-status').className = 'stat-value';
         document.getElementById('stat-status').style.color = '#EF4444';
     }
 }
 
-async function fetchFiles() {
-    const container = document.getElementById('file-list-container');
-    container.innerHTML = '<div class="empty-state">Refreshing files...</div>';
+async function fetchDirectoryContents(path = "") {
+    currentPath = path;
+    selectedPaths.clear();
+    updateBatchBar();
+    document.getElementById('select-all-checkbox').checked = false;
     
+    const container = document.getElementById('explorer-body');
+    container.innerHTML = '<div class="empty-state">Loading directory...</div>';
+    renderBreadcrumbs();
+
     try {
-        const res = await fetch('/api/files');
+        const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+        if (!res.ok) throw new Error('Directory fetch failed');
         const data = await res.json();
         
-        if (!data.files || data.files.length === 0) {
-            container.innerHTML = '<div class="empty-state">No files uploaded yet. Drag & drop files above to start!</div>';
-            return;
-        }
-        
-        container.innerHTML = data.files.map(file => `
-            <div class="file-item">
-                <div class="file-meta">
-                    <span class="file-icon">${getFileIcon(file.name)}</span>
-                    <div>
-                        <div class="file-name">${escapeHtml(file.name)}</div>
-                        <div class="file-subtext">${file.size_kb} KB • Modified ${file.modified}</div>
-                    </div>
-                </div>
-                <div class="file-actions">
-                    <a href="/api/files/${encodeURIComponent(file.name)}" class="action-btn action-download" download>Download</a>
-                    <button onclick="deleteFile('${escapeHtml(file.name)}')" class="action-btn action-delete">Delete</button>
-                </div>
-            </div>
-        `).join('');
-        
+        currentItems = data.items;
+        renderExplorer();
         fetchSystemInfo();
     } catch (err) {
-        container.innerHTML = '<div class="empty-state">Error loading file list.</div>';
+        container.innerHTML = `<div class="empty-state">Error loading directory contents (${escapeHtml(err.message)})</div>`;
     }
 }
 
-function setupUpload() {
-    const dropZone = document.getElementById('drop-zone');
-    const fileInput = document.getElementById('file-input');
+function renderBreadcrumbs() {
+    const container = document.getElementById('breadcrumbs');
+    const parts = currentPath ? currentPath.split('/') : [];
+    
+    let html = `<span class="crumb-item" onclick="fetchDirectoryContents('')">🏠 Root</span>`;
+    let accumulatedPath = "";
 
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropZone.addEventListener(eventName, (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        }, false);
+    parts.forEach((part, index) => {
+        if (!part) return;
+        accumulatedPath += (accumulatedPath ? '/' : '') + part;
+        const isLast = index === parts.length - 1;
+        
+        html += ` <span class="crumb-separator">/</span> `;
+        if (isLast) {
+            html += `<span class="crumb-current">${escapeHtml(part)}</span>`;
+        } else {
+            const navPath = accumulatedPath;
+            html += `<span class="crumb-item" onclick="fetchDirectoryContents('${escapeHtml(navPath)}')">${escapeHtml(part)}</span>`;
+        }
     });
 
-    ['dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, (e) => {
+    container.innerHTML = html;
+}
+
+function renderExplorer() {
+    const container = document.getElementById('explorer-body');
+    
+    let filtered = currentItems.filter(item => {
+        // Search filter
+        if (searchQuery && !item.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+            return false;
+        }
+        // Type filter
+        if (activeFilter === "code") return item.is_dir || item.is_text;
+        if (activeFilter === "images") return item.is_dir || item.is_image;
+        if (activeFilter === "media") return item.is_dir || item.is_audio || item.is_video;
+        if (activeFilter === "docs") return item.is_dir || (item.is_text && !["py","js","html","css","json"].includes(item.extension));
+        if (activeFilter === "archives") return item.is_dir || item.is_archive;
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        container.className = "explorer-body";
+        container.innerHTML = `<div class="empty-state">No files or folders found.</div>`;
+        return;
+    }
+
+    if (viewMode === "list") {
+        container.className = "file-list-view";
+        container.innerHTML = filtered.map(item => `
+            <div class="file-item-row">
+                <input type="checkbox" ${selectedPaths.has(item.path) ? 'checked' : ''} onchange="toggleItemSelect('${escapeHtml(item.path)}', this)">
+                <span class="item-icon">${getItemIcon(item)}</span>
+                <span class="item-title" onclick="handleItemClick('${escapeHtml(item.path)}', ${item.is_dir}, ${item.is_text}, ${item.is_image}, ${item.is_audio}, ${item.is_video})">
+                    ${escapeHtml(item.name)}
+                </span>
+                <span class="item-size">${item.size_formatted}</span>
+                <span class="item-date">${item.modified}</span>
+                <div class="item-actions">
+                    ${getItemActionButtons(item)}
+                </div>
+            </div>
+        `).join('');
+    } else {
+        container.className = "file-grid-view";
+        container.innerHTML = filtered.map(item => `
+            <div class="file-grid-card">
+                <input type="checkbox" class="grid-checkbox" ${selectedPaths.has(item.path) ? 'checked' : ''} onchange="toggleItemSelect('${escapeHtml(item.path)}', this)">
+                <div class="grid-icon">${getItemIcon(item)}</div>
+                <div class="grid-title" onclick="handleItemClick('${escapeHtml(item.path)}', ${item.is_dir}, ${item.is_text}, ${item.is_image}, ${item.is_audio}, ${item.is_video})">
+                    ${escapeHtml(item.name)}
+                </div>
+                <div class="grid-subtext">${item.is_dir ? 'Folder' : item.size_formatted}</div>
+                <div class="grid-actions">
+                    ${getItemActionButtons(item, true)}
+                </div>
+            </div>
+        `).join('');
+    }
+}
+
+function getItemIcon(item) {
+    if (item.is_dir) return '📁';
+    if (item.is_image) return '🖼️';
+    if (item.is_audio) return '🎵';
+    if (item.is_video) return '🎬';
+    if (item.is_archive) return '📦';
+    if (item.is_text) return '📝';
+    return '📄';
+}
+
+function getItemActionButtons(item, isGrid = false) {
+    let btns = '';
+    
+    if (item.is_dir) {
+        btns += `<button class="btn btn-secondary btn-small" onclick="fetchDirectoryContents('${escapeHtml(item.path)}')">Open</button>`;
+    } else {
+        if (item.is_text) {
+            btns += `<button class="btn btn-primary btn-small" onclick="openEditor('${escapeHtml(item.path)}')">✏️ Edit</button>`;
+        }
+        if (item.is_image || item.is_audio || item.is_video) {
+            btns += `<button class="btn btn-accent btn-small" onclick="openPreview('${escapeHtml(item.path)}', ${item.is_image}, ${item.is_audio}, ${item.is_video})">👁️ Preview</button>`;
+        }
+        btns += `<a href="/api/files/view/${encodeURIComponent(item.path)}" download class="btn btn-secondary btn-small">⬇️</a>`;
+    }
+    
+    btns += `<button class="btn btn-secondary btn-small" onclick="openRenameModal('${escapeHtml(item.path)}', '${escapeHtml(item.name)}')">✏️</button>`;
+    btns += `<button class="btn btn-danger btn-small" onclick="deleteSingleItem('${escapeHtml(item.path)}')">🗑️</button>`;
+    
+    return btns;
+}
+
+function handleItemClick(path, isDir, isText, isImage, isAudio, isVideo) {
+    if (isDir) {
+        fetchDirectoryContents(path);
+    } else if (isText) {
+        openEditor(path);
+    } else if (isImage || isAudio || isVideo) {
+        openPreview(path, isImage, isAudio, isVideo);
+    } else {
+        window.open(`/api/files/view/${encodeURIComponent(path)}`, '_blank');
+    }
+}
+
+// Code Editor Modal
+async function openEditor(path) {
+    try {
+        const res = await fetch(`/api/files/content?path=${encodeURIComponent(path)}`);
+        if (!res.ok) throw new Error('Could not read file content');
+        const data = await res.json();
+        
+        currentEditingPath = path;
+        document.getElementById('editor-title').textContent = `Editing: ${data.filename}`;
+        document.getElementById('editor-path').textContent = path;
+        document.getElementById('code-editor').value = data.content;
+        
+        openModal('editor-modal');
+    } catch (err) {
+        showToast(`Failed to load file: ${err.message}`, 'error');
+    }
+}
+
+async function saveEditorContent() {
+    if (!currentEditingPath) return;
+    const content = document.getElementById('code-editor').value;
+    
+    try {
+        const res = await fetch('/api/files/content', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file_path: currentEditingPath, content: content })
+        });
+        if (!res.ok) throw new Error('Save failed');
+        const data = await res.json();
+        
+        showToast(data.message);
+        closeModal('editor-modal');
+        fetchDirectoryContents(currentPath);
+    } catch (err) {
+        showToast(`Error saving file: ${err.message}`, 'error');
+    }
+}
+
+// Media Preview Modal
+function openPreview(path, isImage, isAudio, isVideo) {
+    const title = document.getElementById('preview-title');
+    const contentBody = document.getElementById('preview-content-body');
+    const rawUrl = `/api/files/view/${encodeURIComponent(path)}`;
+    
+    title.textContent = `Preview: ${path.split('/').pop()}`;
+    
+    if (isImage) {
+        contentBody.innerHTML = `<img src="${rawUrl}" class="preview-img" alt="Preview">`;
+    } else if (isAudio) {
+        contentBody.innerHTML = `<audio controls src="${rawUrl}" class="preview-media"></audio>`;
+    } else if (isVideo) {
+        contentBody.innerHTML = `<video controls src="${rawUrl}" class="preview-media"></video>`;
+    }
+    
+    openModal('preview-modal');
+}
+
+// Folder & File Creation
+async function submitCreateFolder() {
+    const input = document.getElementById('new-folder-name');
+    const folderName = input.value.trim();
+    if (!folderName) return;
+    
+    const targetFolder = currentPath ? `${currentPath}/${folderName}` : folderName;
+    
+    try {
+        const res = await fetch('/api/folders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ folder_path: targetFolder })
+        });
+        if (!res.ok) throw new Error('Failed to create folder');
+        
+        showToast('Folder created!');
+        input.value = '';
+        closeModal('new-folder-modal');
+        fetchDirectoryContents(currentPath);
+    } catch (err) {
+        showToast(`Error creating folder: ${err.message}`, 'error');
+    }
+}
+
+async function submitCreateFile() {
+    const input = document.getElementById('new-file-name');
+    const fileName = input.value.trim();
+    if (!fileName) return;
+    
+    const targetFile = currentPath ? `${currentPath}/${fileName}` : fileName;
+    
+    try {
+        const res = await fetch('/api/files/create-text', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file_path: targetFile, content: "" })
+        });
+        if (!res.ok) throw new Error('Failed to create file');
+        
+        showToast('File created!');
+        input.value = '';
+        closeModal('new-file-modal');
+        fetchDirectoryContents(currentPath);
+        openEditor(targetFile);
+    } catch (err) {
+        showToast(`Error creating file: ${err.message}`, 'error');
+    }
+}
+
+// Rename
+function openRenameModal(path, currentName) {
+    document.getElementById('rename-old-path').value = path;
+    document.getElementById('rename-new-name').value = currentName;
+    openModal('rename-modal');
+}
+
+async function submitRename() {
+    const oldPath = document.getElementById('rename-old-path').value;
+    const newName = document.getElementById('rename-new-name').value.trim();
+    if (!newName) return;
+
+    try {
+        const res = await fetch('/api/files/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ old_path: oldPath, new_name: newName })
+        });
+        if (!res.ok) throw new Error('Rename failed');
+        const data = await res.json();
+        
+        showToast(data.message);
+        closeModal('rename-modal');
+        fetchDirectoryContents(currentPath);
+    } catch (err) {
+        showToast(`Rename error: ${err.message}`, 'error');
+    }
+}
+
+// Deletion
+async function deleteSingleItem(path) {
+    if (!confirm(`Are you sure you want to delete "${path}"?`)) return;
+
+    try {
+        const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Delete failed');
+        
+        showToast('Deleted item');
+        fetchDirectoryContents(currentPath);
+    } catch (err) {
+        showToast(`Delete error: ${err.message}`, 'error');
+    }
+}
+
+// Upload Setup
+function setupUploadHandlers() {
+    const dropZone = document.getElementById('drop-zone-wrapper');
+    const fileInput = document.getElementById('file-input');
+
+    ['dragenter', 'dragover'].forEach(name => {
+        dropZone.addEventListener(name, (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+    });
+
+    ['dragleave', 'drop'].forEach(name => {
+        dropZone.addEventListener(name, (e) => {
             e.preventDefault();
             dropZone.classList.remove('dragover');
-        }, false);
+        });
     });
 
     dropZone.addEventListener('drop', (e) => {
-        const dt = e.dataTransfer;
-        const files = dt.files;
-        if (files.length) uploadFiles(files);
+        if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
     });
 
     fileInput.addEventListener('change', (e) => {
@@ -91,60 +362,127 @@ async function uploadFiles(files) {
         formData.append('files', files[i]);
     }
 
-    const progressBar = document.getElementById('progress-bar');
-    const progressContainer = document.getElementById('upload-progress');
-    progressContainer.style.display = 'block';
-    progressBar.style.width = '50%';
-
     try {
-        const res = await fetch('/api/files/upload', {
+        showToast('Uploading files...');
+        const res = await fetch(`/api/files/upload?target_path=${encodeURIComponent(currentPath)}`, {
             method: 'POST',
             body: formData
         });
-        
-        progressBar.style.width = '100%';
-        
         if (!res.ok) throw new Error('Upload failed');
         const data = await res.json();
         
-        showToast(data.message || 'Upload complete!');
-        fetchFiles();
+        showToast(data.message);
+        fetchDirectoryContents(currentPath);
     } catch (err) {
-        showToast('Error uploading files', 'error');
-    } finally {
-        setTimeout(() => {
-            progressContainer.style.display = 'none';
-            progressBar.style.width = '0%';
-        }, 800);
+        showToast('Upload error', 'error');
     }
 }
 
-async function deleteFile(filename) {
-    if (!confirm(`Are you sure you want to delete "${filename}"?`)) return;
+// Batch Actions
+function toggleItemSelect(path, checkbox) {
+    if (checkbox.checked) {
+        selectedPaths.add(path);
+    } else {
+        selectedPaths.delete(path);
+    }
+    updateBatchBar();
+}
+
+function toggleSelectAll(masterCheckbox) {
+    if (masterCheckbox.checked) {
+        currentItems.forEach(item => selectedPaths.add(item.path));
+    } else {
+        selectedPaths.clear();
+    }
+    renderExplorer();
+    updateBatchBar();
+}
+
+function updateBatchBar() {
+    const batchBar = document.getElementById('batch-bar');
+    const countSpan = document.getElementById('batch-count');
+    
+    if (selectedPaths.size > 0) {
+        batchBar.style.display = 'flex';
+        countSpan.textContent = `${selectedPaths.size} item(s) selected`;
+    } else {
+        batchBar.style.display = 'none';
+    }
+}
+
+async function downloadSelectedZip() {
+    if (selectedPaths.size === 0) return;
+    
+    try {
+        showToast('Compressing ZIP archive...');
+        const res = await fetch('/api/files/zip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paths: Array.from(selectedPaths) })
+        });
+        if (!res.ok) throw new Error('ZIP generation failed');
+        
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cloud_archive_${Date.now()}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        showToast('Download started!');
+    } catch (err) {
+        showToast(`ZIP error: ${err.message}`, 'error');
+    }
+}
+
+async function deleteSelectedItems() {
+    if (selectedPaths.size === 0) return;
+    if (!confirm(`Delete ${selectedPaths.size} selected item(s)?`)) return;
 
     try {
-        const res = await fetch(`/api/files/${encodeURIComponent(filename)}`, {
-            method: 'DELETE'
+        const res = await fetch('/api/files/batch-delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paths: Array.from(selectedPaths) })
         });
-        if (!res.ok) throw new Error('Delete failed');
+        if (!res.ok) throw new Error('Batch delete failed');
+        const data = await res.json();
         
-        showToast(`Deleted ${filename}`);
-        fetchFiles();
+        showToast(data.message);
+        fetchDirectoryContents(currentPath);
     } catch (err) {
-        showToast('Failed to delete file', 'error');
+        showToast(`Batch delete error: ${err.message}`, 'error');
     }
 }
 
-function getFileIcon(filename) {
-    const ext = filename.split('.').pop().toLowerCase();
-    const icons = {
-        pdf: '📄', txt: '📝', doc: '📄', docx: '📄',
-        jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️', svg: '🖼️',
-        mp3: '🎵', wav: '🎵', mp4: '🎬', avi: '🎬',
-        zip: '📦', rar: '📦', tar: '📦', gz: '📦',
-        py: '🐍', js: '⚡', html: '🌐', css: '🎨', json: '⚙️'
-    };
-    return icons[ext] || '📁';
+// UI Filters & Views
+function setViewMode(mode) {
+    viewMode = mode;
+    document.getElementById('view-list-btn').classList.toggle('active', mode === 'list');
+    document.getElementById('view-grid-btn').classList.toggle('active', mode === 'grid');
+    renderExplorer();
+}
+
+function setFilter(filter, button) {
+    activeFilter = filter;
+    document.querySelectorAll('.filter-pill').forEach(btn => btn.classList.remove('active'));
+    button.classList.add('active');
+    renderExplorer();
+}
+
+function handleSearch() {
+    searchQuery = document.getElementById('search-input').value.trim();
+    renderExplorer();
+}
+
+// Modal Helpers
+function openModal(id) {
+    document.getElementById(id).classList.add('open');
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
 }
 
 function showToast(message, type = 'info') {
@@ -159,6 +497,7 @@ function showToast(message, type = 'info') {
 }
 
 function escapeHtml(text) {
+    if (!text) return '';
     const div = document.createElement('div');
     div.innerText = text;
     return div.innerHTML;

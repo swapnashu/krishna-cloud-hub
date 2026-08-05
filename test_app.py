@@ -13,6 +13,7 @@ def test_healthz():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
+    assert data["version"] == "2.0.0"
 
 
 def test_system_info():
@@ -20,45 +21,62 @@ def test_system_info():
     assert response.status_code == 200
     data = response.json()
     assert "total_files" in data
-    assert "total_storage_mb" in data
+    assert "total_storage_formatted" in data
 
 
-def test_file_upload_list_download_delete():
-    # 1. Upload a test file
-    test_filename = "test_sample.txt"
-    file_content = b"Hello from FastAPI Cloud Test!"
-    
-    response = client.post(
-        "/api/files/upload",
-        files={"files": (test_filename, file_content, "text/plain")}
-    )
-    assert response.status_code == 200
-    upload_data = response.json()
-    assert len(upload_data["files"]) == 1
-    assert upload_data["files"][0]["filename"] == test_filename
+def test_directory_traversal_prevention():
+    response = client.get("/api/files?path=../../")
+    assert response.status_code == 400
+    assert "Directory traversal" in response.json()["detail"]
 
-    # 2. List files and check test file is present
-    response = client.get("/api/files")
-    assert response.status_code == 200
-    files_list = response.json()["files"]
-    assert any(f["name"] == test_filename for f in files_list)
 
-    # 3. Download test file
-    response = client.get(f"/api/files/{test_filename}")
-    assert response.status_code == 200
-    assert response.content == file_content
-
-    # 4. Delete test file
-    response = client.delete(f"/api/files/{test_filename}")
+def test_advanced_file_operations():
+    # 1. Create a subfolder
+    subfolder_name = "test_subfolder"
+    response = client.post("/api/folders", json={"folder_path": subfolder_name})
     assert response.status_code == 200
 
-    # 5. Verify deletion
-    response = client.get(f"/api/files/{test_filename}")
-    assert response.status_code == 404
+    # 2. Create a text file inside subfolder
+    file_path = f"{subfolder_name}/hello.py"
+    initial_code = "print('Hello Cloud!')"
+    response = client.post("/api/files/create-text", json={"file_path": file_path, "content": initial_code})
+    assert response.status_code == 200
+
+    # 3. Read file content
+    response = client.get(f"/api/files/content?path={file_path}")
+    assert response.status_code == 200
+    assert response.json()["content"] == initial_code
+
+    # 4. Save edited content
+    updated_code = "print('Hello Advanced Cloud File Manager!')"
+    response = client.put("/api/files/content", json={"file_path": file_path, "content": updated_code})
+    assert response.status_code == 200
+
+    # 5. List directory items
+    response = client.get(f"/api/files?path={subfolder_name}")
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert len(items) == 1
+    assert items[0]["name"] == "hello.py"
+
+    # 6. Rename file
+    response = client.post("/api/files/rename", json={"old_path": file_path, "new_name": "app.py"})
+    assert response.status_code == 200
+
+    # 7. Compress folder to ZIP
+    renamed_file_path = f"{subfolder_name}/app.py"
+    response = client.post("/api/files/zip", json={"paths": [renamed_file_path]})
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+
+    # 8. Batch delete subfolder
+    response = client.post("/api/files/batch-delete", json={"paths": [subfolder_name]})
+    assert response.status_code == 200
 
 
 if __name__ == "__main__":
     test_healthz()
     test_system_info()
-    test_file_upload_list_download_delete()
-    print("All automated tests passed successfully!")
+    test_directory_traversal_prevention()
+    test_advanced_file_operations()
+    print("All advanced automated tests passed successfully!")
