@@ -20,36 +20,63 @@ document.addEventListener('DOMContentLoaded', () => {
     setupUploadHandlers();
 });
 
-async function fetchSystemInfo() {
+// Helper for safe DOM element property setting
+function setElementText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+
+function setElementWidth(id, widthStr) {
+    const el = document.getElementById(id);
+    if (el) el.style.width = widthStr;
+}
+
+async function fetchSystemInfo(retryCount = 0) {
     try {
-        const res = await fetch('/api/info');
-        if (!res.ok) throw new Error('Failed system info request');
+        const res = await fetch('/api/info?t=' + Date.now());
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         
-        document.getElementById('stat-status').textContent = 'Online 🟢';
-        document.getElementById('stat-files').textContent = `Files: ${data.total_files}`;
+        const statusEl = document.getElementById('stat-status');
+        if (statusEl) {
+            statusEl.textContent = 'Online 🟢';
+            statusEl.className = 'stat-value online';
+            statusEl.style.color = '';
+        }
+        
+        setElementText('stat-files', `Files: ${data.total_files}`);
         
         // Disk metrics
         if (data.disk) {
-            document.getElementById('storage-percent').textContent = `${data.disk.used_percent}%`;
-            document.getElementById('storage-fill').style.width = `${Math.min(data.disk.used_percent, 100)}%`;
-            document.getElementById('stat-disk-subtext').textContent = `Free: ${data.disk.free_formatted} / Total: ${data.disk.total_formatted}`;
+            setElementText('storage-percent', `${data.disk.used_percent}%`);
+            setElementWidth('storage-fill', `${Math.min(data.disk.used_percent, 100)}%`);
+            setElementText('stat-disk-subtext', `Free: ${data.disk.free_formatted} / Total: ${data.disk.total_formatted}`);
         }
 
         // CPU & RAM metrics
         if (data.system) {
-            document.getElementById('cpu-percent').textContent = `${data.system.cpu_percent}%`;
-            document.getElementById('cpu-fill').style.width = `${Math.min(data.system.cpu_percent, 100)}%`;
+            setElementText('cpu-percent', `${data.system.cpu_percent}%`);
+            setElementWidth('cpu-fill', `${Math.min(data.system.cpu_percent, 100)}%`);
             
-            document.getElementById('ram-percent').textContent = `${data.system.ram_percent}%`;
-            document.getElementById('ram-fill').style.width = `${Math.min(data.system.ram_percent, 100)}%`;
-            document.getElementById('stat-ram-subtext').textContent = `Used: ${data.system.ram_used_formatted} / ${data.system.ram_total_formatted}`;
+            setElementText('ram-percent', `${data.system.ram_percent}%`);
+            setElementWidth('ram-fill', `${Math.min(data.system.ram_percent, 100)}%`);
+            setElementText('stat-ram-subtext', `Used: ${data.system.ram_used_formatted} / ${data.system.ram_total_formatted}`);
         }
         
-        document.getElementById('stat-uptime').textContent = `:${data.port} | ${data.uptime}`;
+        setElementText('stat-uptime', `:${data.port} | ${data.uptime}`);
     } catch (err) {
-        document.getElementById('stat-status').textContent = 'Offline 🔴';
-        document.getElementById('stat-status').style.color = '#EF4444';
+        // Cold-start retry logic (retry up to 3 times with 2-second delay if server is waking up)
+        if (retryCount < 3) {
+            setTimeout(() => fetchSystemInfo(retryCount + 1), 2000);
+            return;
+        }
+        
+        const statusEl = document.getElementById('stat-status');
+        if (statusEl) {
+            statusEl.textContent = 'Offline 🔴';
+            statusEl.className = 'stat-value';
+            statusEl.style.color = '#EF4444';
+        }
     }
 }
 
