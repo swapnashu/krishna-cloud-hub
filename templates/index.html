@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Cloud-ready Python FastAPI Web Service & File Manager deployable on Render, Railway, and Fly.io">
+    <title>Cloud File Hub | FastAPI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="background-glow"></div>
+    
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="brand">
+                <div class="logo">🐍</div>
+                <div>
+                    <h1>Cloud File Hub</h1>
+                    <p class="subtitle">Python FastAPI • Deploy Ready for Render, Railway & Fly.io</p>
+                </div>
+            </div>
+            <div class="cloud-badges">
+                <span class="badge render" id="badge-render">Render Ready</span>
+                <span class="badge railway" id="badge-railway">Railway Ready</span>
+                <span class="badge fly" id="badge-fly">Fly.io Ready</span>
+            </div>
+        </header>
+
+        <!-- Stats Bar -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-label">System Status</span>
+                <div class="stat-value online" id="stat-status">Checking...</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Total Files</span>
+                <div class="stat-value" id="stat-files">0</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Storage Used</span>
+                <div class="stat-value" id="stat-storage">0.00 MB</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Port / Uptime</span>
+                <div class="stat-value" id="stat-uptime">--</div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Upload Area -->
+            <section class="card upload-section">
+                <h2>Upload Files</h2>
+                <div class="drop-zone" id="drop-zone">
+                    <div class="drop-icon">☁️</div>
+                    <p>Drag & drop files here or <label for="file-input" class="file-browse-btn">Browse Files</label></p>
+                    <input type="file" id="file-input" multiple hidden>
+                    <span class="upload-hint">Supports documents, images, code, and archives</span>
+                </div>
+                <div class="upload-progress" id="upload-progress" style="display: none;">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+            </section>
+
+            <!-- File List -->
+            <section class="card files-section">
+                <div class="files-header">
+                    <h2>Managed Files</h2>
+                    <button class="btn btn-secondary" id="refresh-btn" onclick="fetchFiles()">Refresh</button>
+                </div>
+                <div id="file-list-container" class="file-list">
+                    <div class="empty-state">Loading files...</div>
+                </div>
+            </section>
+        </main>
+
+        <!-- API Reference Banner -->
+        <footer class="footer">
+            <p>API Endpoint Active: <a href="/docs" target="_blank" class="api-link">View Swagger UI Docs (/docs)</a> • Health check: <a href="/healthz" target="_blank" class="api-link">/healthz</a></p>
+        </footer>
+    </div>
+
+    <!-- Notification Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
