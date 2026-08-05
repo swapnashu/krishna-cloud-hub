@@ -15,7 +15,7 @@ def test_healthz():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
-    assert data["version"] == "3.0.0"
+    assert data["version"] == "3.3.0"
 
 
 def test_system_info_with_cpu_ram():

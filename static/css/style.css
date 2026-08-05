@@ -11,6 +11,7 @@
     --accent-green: #10B981;
     --accent-red: #EF4444;
     --accent-amber: #F59E0B;
+    --accent-telegram: #229ED9;
     --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
     --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
     --font-mono: 'Fira Code', monospace;
@@ -142,6 +143,7 @@ h1 {
 .badge.render { border-color: rgba(59, 130, 246, 0.4); color: #60A5FA; }
 .badge.railway { border-color: rgba(236, 72, 153, 0.4); color: #F472B6; }
 .badge.fly { border-color: rgba(16, 185, 129, 0.4); color: #34D399; }
+.badge.telegram { border-color: rgba(34, 158, 217, 0.4); color: #0088CC; }
 
 /* Stats Bar & Disk Storage Gauge */
 .stats-grid {
@@ -237,6 +239,13 @@ h1 {
 
 .btn-accent { background: var(--accent-purple); color: white; cursor: pointer; }
 .btn-accent:hover { opacity: 0.9; }
+
+.btn-telegram {
+    background: linear-gradient(135deg, #0088CC, #229ED9);
+    color: white;
+    box-shadow: 0 4px 15px rgba(0, 136, 204, 0.3);
+}
+.btn-telegram:hover { opacity: 0.9; transform: translateY(-1px); }
 
 .btn-secondary { background: rgba(255, 255, 255, 0.08); color: var(--text-primary); border: 1px solid var(--border-color); }
 .btn-secondary:hover { background: rgba(255, 255, 255, 0.15); }
@@ -437,8 +446,19 @@ h1 {
 
 .file-item-row:hover { background: var(--bg-card-hover); border-color: rgba(255, 255, 255, 0.2); }
 .item-icon { font-size: 1.2rem; }
-.item-title { font-weight: 500; color: var(--text-primary); cursor: pointer; }
+.item-title { font-weight: 500; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; }
 .item-title:hover { color: #60A5FA; }
+
+.tg-pill {
+    font-size: 0.68rem;
+    background: rgba(0, 136, 204, 0.15);
+    color: #229ED9;
+    border: 1px solid rgba(0, 136, 204, 0.3);
+    padding: 0.1rem 0.4rem;
+    border-radius: 6px;
+    font-weight: 600;
+}
+
 .item-size, .item-date { font-size: 0.8rem; color: var(--text-secondary); }
 .item-actions { display: flex; gap: 0.3rem; justify-content: flex-end; }
 

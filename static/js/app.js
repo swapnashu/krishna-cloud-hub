@@ -16,6 +16,7 @@ let terminalHistoryIdx = -1;
 
 document.addEventListener('DOMContentLoaded', () => {
     fetchSystemInfo();
+    checkTelegramStatus();
     fetchDirectoryContents(currentPath);
     setupUploadHandlers();
 });
@@ -29,6 +30,60 @@ function setElementText(id, text) {
 function setElementWidth(id, widthStr) {
     const el = document.getElementById(id);
     if (el) el.style.width = widthStr;
+}
+
+async function checkTelegramStatus() {
+    try {
+        const res = await fetch('/api/telegram/status');
+        const data = await res.json();
+        const badge = document.getElementById('tg-status-badge');
+        
+        if (data.connected && badge) {
+            badge.textContent = `✈️ ${data.bot_name || 'Telegram Cloud'}`;
+            badge.style.borderColor = 'rgba(16, 185, 129, 0.5)';
+            badge.style.color = '#34D399';
+        } else if (badge) {
+            badge.textContent = '✈️ Telegram Disconnected';
+            badge.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+            badge.style.color = 'var(--text-secondary)';
+        }
+    } catch (err) {}
+}
+
+function openTelegramModal() {
+    openModal('telegram-modal');
+    checkTelegramStatus();
+}
+
+async function submitTelegramConfig() {
+    const botToken = document.getElementById('tg-bot-token-input').value.trim();
+    const chatId = document.getElementById('tg-chat-id-input').value.trim();
+    const infoDiv = document.getElementById('tg-connection-info');
+    
+    if (!botToken) return showToast('Please enter your Telegram Bot Token', 'error');
+    
+    infoDiv.innerHTML = '<span style="color: #60A5FA;">Testing connection to Telegram...</span>';
+    
+    try {
+        const res = await fetch('/api/telegram/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bot_token: botToken, chat_id: chatId })
+        });
+        const data = await res.json();
+        
+        if (data.status && data.status.connected) {
+            infoDiv.innerHTML = `<span style="color: #34D399;">Connected to ${escapeHtml(data.status.bot_name)} (${escapeHtml(data.status.username)})!</span>`;
+            showToast('Telegram Unlimited Cloud Storage Connected! ✈️');
+            closeModal('telegram-modal');
+            checkTelegramStatus();
+            fetchDirectoryContents(currentPath);
+        } else {
+            infoDiv.innerHTML = `<span style="color: #EF4444;">${escapeHtml(data.message || 'Connection failed')}</span>`;
+        }
+    } catch (err) {
+        infoDiv.innerHTML = `<span style="color: #EF4444;">Error: ${escapeHtml(err.message)}</span>`;
+    }
 }
 
 async function fetchSystemInfo(retryCount = 0) {
@@ -65,7 +120,6 @@ async function fetchSystemInfo(retryCount = 0) {
         
         setElementText('stat-uptime', `:${data.port} | ${data.uptime}`);
     } catch (err) {
-        // Cold-start retry logic (retry up to 3 times with 2-second delay if server is waking up)
         if (retryCount < 3) {
             setTimeout(() => fetchSystemInfo(retryCount + 1), 2000);
             return;
@@ -161,6 +215,7 @@ function renderExplorer() {
                 <span class="item-icon">${getItemIcon(item)}</span>
                 <span class="item-title" onclick="handleItemClick('${escapeHtml(item.path)}', ${item.is_dir}, ${item.is_text}, ${item.is_image}, ${item.is_audio}, ${item.is_video}, ${item.is_db})">
                     ${escapeHtml(item.name)}
+                    ${item.in_telegram ? '<span class="tg-pill" title="Stored permanently in Telegram Cloud">✈️ Cloud Saved</span>' : ''}
                 </span>
                 <span class="item-size">${item.size_formatted}</span>
                 <span class="item-date">${item.modified}</span>
@@ -178,7 +233,7 @@ function renderExplorer() {
                 <div class="grid-title" onclick="handleItemClick('${escapeHtml(item.path)}', ${item.is_dir}, ${item.is_text}, ${item.is_image}, ${item.is_audio}, ${item.is_video}, ${item.is_db})">
                     ${escapeHtml(item.name)}
                 </div>
-                <div class="grid-subtext">${item.is_dir ? 'Folder' : item.size_formatted}</div>
+                <div class="grid-subtext">${item.is_dir ? 'Folder' : item.size_formatted} ${item.in_telegram ? '✈️' : ''}</div>
                 <div class="grid-actions">
                     ${getItemActionButtons(item, true)}
                 </div>

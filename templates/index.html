@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Ultimate Web IDE & Cloud Suite v3.1 with Real-Time Upload Progress Bar">
-    <title>Ultimate Cloud Web IDE & Suite v3.1</title>
+    <meta name="description" content="Ultimate Web IDE & Cloud Suite v3.3 with Telegram Unlimited Storage">
+    <title>Ultimate Cloud Web IDE & Suite v3.3</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -21,10 +21,11 @@
                 <div class="logo">⚡</div>
                 <div>
                     <h1>Ultimate Cloud Web IDE & Suite</h1>
-                    <p class="subtitle">Python FastAPI • Multi-Cloud Ready (Render, Railway, Fly.io)</p>
+                    <p class="subtitle">Python FastAPI • Telegram Unlimited Cloud Storage Enabled</p>
                 </div>
             </div>
             <div class="cloud-badges">
+                <span class="badge telegram" id="tg-status-badge">✈️ Telegram Cloud</span>
                 <span class="badge render">Render</span>
                 <span class="badge railway">Railway</span>
                 <span class="badge fly">Fly.io</span>
@@ -76,6 +77,7 @@
                     <button class="btn btn-primary" onclick="openModal('new-folder-modal')">📁 New Folder</button>
                     <button class="btn btn-primary" onclick="openModal('new-file-modal')">📝 New File</button>
                     <label for="file-input" class="btn btn-accent">☁️ Upload Files</label>
+                    <button class="btn btn-telegram" onclick="openTelegramModal()">✈️ Connect Telegram Cloud</button>
                     <button class="btn btn-secondary" onclick="openModal('grep-search-modal')">🔍 Grep Search</button>
                     <button class="btn btn-secondary" onclick="openGitModal()">🐙 Git Client</button>
                     <button class="btn btn-secondary" onclick="toggleTerminal()">>_ Web Terminal</button>
@@ -124,7 +126,7 @@
                 </div>
                 <div class="upload-progress-footer">
                     <span id="upload-bytes-text" class="upload-bytes">0 B / 0 B</span>
-                    <span class="upload-status-text">Live Byte Transfer</span>
+                    <span class="upload-status-text">✈️ Telegram Cloud Stream</span>
                 </div>
             </div>
 
@@ -191,7 +193,7 @@
                 </div>
                 
                 <div class="terminal-console" id="terminal-console">
-                    <div class="terminal-line log-system">Welcome to Ultimate Web IDE Web Terminal v3.1</div>
+                    <div class="terminal-line log-system">Welcome to Ultimate Web IDE Web Terminal v3.3</div>
                     <div class="terminal-line log-system">Run shell commands, execute Python scripts (`python script.py`), or check server info.</div>
                 </div>
 
@@ -209,6 +211,26 @@
     </div>
 
     <!-- Modals -->
+
+    <!-- Telegram Cloud Connector Modal -->
+    <div class="modal-overlay" id="telegram-modal">
+        <div class="modal-card">
+            <h3>✈️ Connect Telegram Unlimited Cloud Storage</h3>
+            <p class="editor-subtext" style="margin-bottom: 0.8rem;">Files uploaded will be stored in Telegram Cloud (100% Free & Permanent forever, up to 2GB per file)!</p>
+            <label class="stat-label">Telegram Bot Token (from @BotFather)</label>
+            <input type="text" id="tg-bot-token-input" class="modal-input" placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz">
+            
+            <label class="stat-label">Telegram Chat ID / Channel ID (Optional)</label>
+            <input type="text" id="tg-chat-id-input" class="modal-input" placeholder="@yourchannel or -100123456789">
+            
+            <div id="tg-connection-info" style="margin: 0.5rem 0; font-size: 0.85rem;"></div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('telegram-modal')">Cancel</button>
+                <button class="btn btn-telegram" onclick="submitTelegramConfig()">✈️ Connect Telegram Storage</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Full-Text Grep Search Modal -->
     <div class="modal-overlay" id="grep-search-modal">
@@ -350,6 +372,6 @@
     <div id="toast-container" class="toast-container"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-    <script src="/static/js/app.js?v=3.2"></script>
+    <script src="/static/js/app.js?v=3.3"></script>
 </body>
 </html>
