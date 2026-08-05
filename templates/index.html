@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Advanced Cloud File Manager & Web IDE v2.1 with Storage Gauge and Code Editor">
+    <meta name="description" content="Advanced Cloud File Manager & Web IDE v2.2 with Integrated Web Terminal">
     <title>Advanced Cloud File Hub & IDE</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -64,6 +64,7 @@
                     <button class="btn btn-primary" onclick="openModal('new-folder-modal')">📁 New Folder</button>
                     <button class="btn btn-primary" onclick="openModal('new-file-modal')">📝 New File</button>
                     <label for="file-input" class="btn btn-accent">☁️ Upload Files</label>
+                    <button class="btn btn-secondary" onclick="toggleTerminal()">>_ Web Terminal</button>
                     <input type="file" id="file-input" multiple hidden>
                 </div>
                 
@@ -135,6 +136,35 @@
                     <div class="empty-state">Loading directory...</div>
                 </div>
             </div>
+
+            <!-- Web Terminal Drawer -->
+            <div class="card terminal-card" id="terminal-drawer" style="display: none;">
+                <div class="terminal-header">
+                    <div class="terminal-title">
+                        <span>>_ Web Terminal</span>
+                        <span class="terminal-cwd" id="terminal-cwd-badge">uploads/</span>
+                    </div>
+                    <div class="terminal-actions">
+                        <button class="btn btn-secondary btn-small" onclick="runQuickCommand('python --version')">python --version</button>
+                        <button class="btn btn-secondary btn-small" onclick="runQuickCommand('pip list')">pip list</button>
+                        <button class="btn btn-secondary btn-small" onclick="clearTerminalLogs()">Clear</button>
+                        <button class="btn btn-secondary btn-small" onclick="toggleTerminal()">✖ Close</button>
+                    </div>
+                </div>
+                
+                <!-- Terminal Output Window -->
+                <div class="terminal-console" id="terminal-console">
+                    <div class="terminal-line log-system">Welcome to Advanced Cloud File Manager Web Terminal v2.2</div>
+                    <div class="terminal-line log-system">Run shell commands, execute Python scripts (`python script.py`), or check server info.</div>
+                </div>
+
+                <!-- Command Input Line -->
+                <div class="terminal-input-bar">
+                    <span class="terminal-prompt">$</span>
+                    <input type="text" id="terminal-cmd-input" class="terminal-input" placeholder="Type shell command (e.g. python script.py, ls, pwd) and press Enter..." onkeydown="handleTerminalKeyDown(event)">
+                    <button class="btn btn-primary btn-small" onclick="submitTerminalCommand()">Run</button>
+                </div>
+            </div>
         </main>
 
         <footer class="footer">
@@ -177,6 +207,7 @@
                     <span class="editor-subtext" id="editor-path">uploads/file.txt</span>
                 </div>
                 <div class="editor-actions">
+                    <button class="btn btn-primary" id="run-script-btn" onclick="runCurrentScript()">▶️ Run Script</button>
                     <button class="btn btn-accent" onclick="saveEditorContent()">💾 Save Changes</button>
                     <button class="btn btn-secondary" onclick="closeModal('editor-modal')">Close</button>
                 </div>

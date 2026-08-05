@@ -9,6 +9,10 @@ let sortBy = "name";
 let sortOrder = "asc";
 let currentEditingPath = "";
 
+// Terminal State
+let terminalHistory = [];
+let terminalHistoryIdx = -1;
+
 document.addEventListener('DOMContentLoaded', () => {
     fetchSystemInfo();
     fetchDirectoryContents(currentPath);
@@ -43,6 +47,10 @@ async function fetchDirectoryContents(path = "") {
     updateBatchBar();
     document.getElementById('select-all-checkbox').checked = false;
     
+    // Update Terminal CWD Badge
+    const cwdBadge = document.getElementById('terminal-cwd-badge');
+    if (cwdBadge) cwdBadge.textContent = path ? `uploads/${path}` : 'uploads/';
+
     const container = document.getElementById('explorer-body');
     container.innerHTML = '<div class="empty-state">Loading directory...</div>';
     renderBreadcrumbs();
@@ -158,6 +166,9 @@ function getItemActionButtons(item, isGrid = false) {
     } else {
         if (item.is_text) {
             btns += `<button class="btn btn-primary btn-small" onclick="openEditor('${escapeHtml(item.path)}')">✏️ Edit</button>`;
+            if (["py", "js", "sh", "bat"].includes(item.extension)) {
+                btns += `<button class="btn btn-accent btn-small" onclick="runScriptFile('${escapeHtml(item.path)}', '${item.extension}')" title="Run Script">▶️</button>`;
+            }
         }
         if (item.is_image || item.is_audio || item.is_video) {
             btns += `<button class="btn btn-accent btn-small" onclick="openPreview('${escapeHtml(item.path)}', ${item.is_image}, ${item.is_audio}, ${item.is_video})">👁️ Preview</button>`;
@@ -197,6 +208,13 @@ async function openEditor(path) {
         document.getElementById('editor-path').textContent = path;
         document.getElementById('code-editor').value = data.content;
         
+        const runBtn = document.getElementById('run-script-btn');
+        if (["py", "js", "sh", "bat"].includes(data.extension)) {
+            runBtn.style.display = 'inline-flex';
+        } else {
+            runBtn.style.display = 'none';
+        }
+        
         openModal('editor-modal');
     } catch (err) {
         showToast(`Failed to load file: ${err.message}`, 'error');
@@ -222,6 +240,140 @@ async function saveEditorContent() {
     } catch (err) {
         showToast(`Error saving file: ${err.message}`, 'error');
     }
+}
+
+async function runCurrentScript() {
+    if (!currentEditingPath) return;
+    await saveEditorContent();
+    const ext = currentEditingPath.split('.').pop().toLowerCase();
+    runScriptFile(currentEditingPath, ext);
+}
+
+function runScriptFile(path, ext) {
+    const filename = path.split('/').pop();
+    let runnerCmd = "";
+    if (ext === "py") runnerCmd = `python "${filename}"`;
+    else if (ext === "js") runnerCmd = `node "${filename}"`;
+    else if (ext === "sh") runnerCmd = `bash "${filename}"`;
+    else runnerCmd = `"${filename}"`;
+    
+    // Open terminal drawer and execute
+    const terminalDrawer = document.getElementById('terminal-drawer');
+    terminalDrawer.style.display = 'block';
+    terminalDrawer.scrollIntoView({ behavior: 'smooth' });
+    
+    const parentFolder = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : "";
+    executeTerminalCommand(runnerCmd, parentFolder);
+}
+
+// Web Terminal Operations
+function toggleTerminal() {
+    const terminalDrawer = document.getElementById('terminal-drawer');
+    if (terminalDrawer.style.display === 'none' || !terminalDrawer.style.display) {
+        terminalDrawer.style.display = 'block';
+        terminalDrawer.scrollIntoView({ behavior: 'smooth' });
+        document.getElementById('terminal-cmd-input').focus();
+    } else {
+        terminalDrawer.style.display = 'none';
+    }
+}
+
+function runQuickCommand(cmd) {
+    const terminalDrawer = document.getElementById('terminal-drawer');
+    terminalDrawer.style.display = 'block';
+    executeTerminalCommand(cmd, currentPath);
+}
+
+function submitTerminalCommand() {
+    const input = document.getElementById('terminal-cmd-input');
+    const cmd = input.value.trim();
+    if (!cmd) return;
+    
+    terminalHistory.push(cmd);
+    terminalHistoryIdx = terminalHistory.length;
+    input.value = '';
+    
+    executeTerminalCommand(cmd, currentPath);
+}
+
+function handleTerminalKeyDown(event) {
+    if (event.key === 'Enter') {
+        submitTerminalCommand();
+    } else if (event.key === 'ArrowUp') {
+        if (terminalHistoryIdx > 0) {
+            terminalHistoryIdx--;
+            event.target.value = terminalHistory[terminalHistoryIdx];
+        }
+    } else if (event.key === 'ArrowDown') {
+        if (terminalHistoryIdx < terminalHistory.length - 1) {
+            terminalHistoryIdx++;
+            event.target.value = terminalHistory[terminalHistoryIdx];
+        } else {
+            terminalHistoryIdx = terminalHistory.length;
+            event.target.value = '';
+        }
+    }
+}
+
+async function executeTerminalCommand(cmd, cwdOverride = null) {
+    const consoleDiv = document.getElementById('terminal-console');
+    const targetCwd = cwdOverride !== null ? cwdOverride : currentPath;
+    const cwdDisplay = targetCwd ? `uploads/${targetCwd}` : 'uploads/';
+    
+    // Append command line
+    const cmdLine = document.createElement('div');
+    cmdLine.className = 'terminal-line log-cmd';
+    cmdLine.textContent = `$ ${cwdDisplay}> ${cmd}`;
+    consoleDiv.appendChild(cmdLine);
+    consoleDiv.scrollTop = consoleDiv.scrollHeight;
+
+    if (cmd.toLowerCase() === 'clear') {
+        clearTerminalLogs();
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/terminal/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: cmd, cwd: targetCwd })
+        });
+        
+        if (!res.ok) throw new Error('Command execution API error');
+        const data = await res.json();
+        
+        if (data.stdout) {
+            const stdoutLine = document.createElement('div');
+            stdoutLine.className = 'terminal-line log-stdout';
+            stdoutLine.textContent = data.stdout;
+            consoleDiv.appendChild(stdoutLine);
+        }
+        
+        if (data.stderr) {
+            const stderrLine = document.createElement('div');
+            stderrLine.className = 'terminal-line log-stderr';
+            stderrLine.textContent = data.stderr;
+            consoleDiv.appendChild(stderrLine);
+        }
+        
+        const infoLine = document.createElement('div');
+        infoLine.className = data.exit_code === 0 ? 'terminal-line log-success' : 'terminal-line log-stderr';
+        infoLine.textContent = `[Process finished with exit code ${data.exit_code} (${data.duration_ms}ms)]`;
+        consoleDiv.appendChild(infoLine);
+        
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    } catch (err) {
+        const errLine = document.createElement('div');
+        errLine.className = 'terminal-line log-stderr';
+        errLine.textContent = `Execution Error: ${err.message}`;
+        consoleDiv.appendChild(errLine);
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    }
+}
+
+function clearTerminalLogs() {
+    const consoleDiv = document.getElementById('terminal-console');
+    consoleDiv.innerHTML = '<div class="terminal-line log-system">Terminal cleared. Type a command or run a script above.</div>';
 }
 
 // Media Preview Modal

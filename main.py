@@ -1,3 +1,4 @@
+import asyncio
 import os
 import shutil
 import tempfile
@@ -18,8 +19,8 @@ import config
 
 app = FastAPI(
     title=config.APP_NAME,
-    description="Advanced Cloud File Manager & Web IDE v2.1",
-    version="2.1.0"
+    description="Advanced Cloud File Manager & Web IDE v2.2 with Terminal",
+    version="2.2.0"
 )
 
 app.add_middleware(
@@ -67,6 +68,10 @@ class CopyItemRequest(BaseModel):
 class BatchPathRequest(BaseModel):
     paths: List[str]
 
+class ExecuteCommandRequest(BaseModel):
+    command: str = Field(..., description="Shell command to execute")
+    cwd: Optional[str] = Field("", description="Working directory relative to upload root")
+
 
 def get_safe_path(relative_path: str = "") -> Path:
     """Resolve and validate path to prevent directory traversal outside UPLOAD_DIR."""
@@ -103,7 +108,7 @@ async def serve_dashboard(request: Request):
 async def health_check():
     return {
         "status": "healthy",
-        "version": "2.1.0",
+        "version": "2.2.0",
         "uptime_seconds": round(time.time() - START_TIME, 2),
         "service": config.APP_NAME,
         "environment_port": config.PORT
@@ -400,6 +405,67 @@ async def delete_single_item(path: str = Query(...)):
         full_p.unlink()
         
     return {"message": f"Successfully deleted '{full_p.name}'"}
+
+
+# Web Terminal Command Execution Endpoint
+@app.post("/api/terminal/execute")
+async def execute_terminal_command(req: ExecuteCommandRequest):
+    cmd = req.command.strip()
+    if not cmd:
+        raise HTTPException(status_code=400, detail="Empty command")
+        
+    working_dir = get_safe_path(req.cwd or "")
+    if not working_dir.exists() or not working_dir.is_dir():
+        working_dir = config.UPLOAD_DIR
+
+    start_time = time.time()
+    try:
+        process = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(working_dir)
+        )
+        
+        # Enforce 30-second execution timeout
+        try:
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(process.communicate(), timeout=30.0)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+            return {
+                "command": cmd,
+                "stdout": "",
+                "stderr": "Execution timed out after 30 seconds.",
+                "exit_code": -1,
+                "duration_ms": 30000
+            }
+
+        duration_ms = round((time.time() - start_time) * 1000, 2)
+        stdout_str = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+        stderr_str = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
+        
+        # Truncate very long outputs
+        if len(stdout_str) > 50000:
+            stdout_str = stdout_str[:50000] + "\n... [Output truncated at 50KB]"
+        if len(stderr_str) > 50000:
+            stderr_str = stderr_str[:50000] + "\n... [Output truncated at 50KB]"
+
+        return {
+            "command": cmd,
+            "stdout": stdout_str,
+            "stderr": stderr_str,
+            "exit_code": process.returncode,
+            "duration_ms": duration_ms
+        }
+    except Exception as e:
+        return {
+            "command": cmd,
+            "stdout": "",
+            "stderr": f"System Error executing command: {str(e)}",
+            "exit_code": 1,
+            "duration_ms": round((time.time() - start_time) * 1000, 2)
+        }
 
 
 if __name__ == "__main__":
