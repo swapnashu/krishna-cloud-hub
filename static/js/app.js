@@ -217,6 +217,101 @@ function handleItemClick(path, isDir, isText, isImage, isAudio, isVideo, isDb) {
     }
 }
 
+// Upload Handlers with Real-Time Progress Bar
+function setupUploadHandlers() {
+    const dropZone = document.getElementById('drop-zone-wrapper');
+    const fileInput = document.getElementById('file-input');
+
+    ['dragenter', 'dragover'].forEach(name => {
+        dropZone.addEventListener(name, (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+    });
+
+    ['dragleave', 'drop'].forEach(name => {
+        dropZone.addEventListener(name, (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+        });
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+    });
+
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length) uploadFiles(e.target.files);
+    });
+}
+
+function uploadFiles(files) {
+    const formData = new FormData();
+    let totalBytes = 0;
+    for (let i = 0; i < files.length; i++) {
+        formData.append('files', files[i]);
+        totalBytes += files[i].size;
+    }
+
+    const progressContainer = document.getElementById('upload-progress-container');
+    const progressBar = document.getElementById('upload-progress-bar');
+    const percentText = document.getElementById('upload-percent-text');
+    const filenameText = document.getElementById('upload-filename-text');
+    const bytesText = document.getElementById('upload-bytes-text');
+
+    progressContainer.style.display = 'block';
+    filenameText.textContent = files.length === 1 ? `Uploading "${files[0].name}"...` : `Uploading ${files.length} file(s)...`;
+    progressBar.style.width = '0%';
+    percentText.textContent = '0%';
+    bytesText.textContent = `0 B / ${formatBytesJS(totalBytes)}`;
+
+    const xhr = new XMLHttpRequest();
+    const targetUrl = `/api/files/upload?target_path=${encodeURIComponent(currentPath)}`;
+    xhr.open('POST', targetUrl, true);
+
+    xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            progressBar.style.width = `${percent}%`;
+            percentText.textContent = `${percent}%`;
+            bytesText.textContent = `${formatBytesJS(e.loaded)} / ${formatBytesJS(e.total)}`;
+        }
+    };
+
+    xhr.onload = () => {
+        if (xhr.status === 200) {
+            progressBar.style.width = '100%';
+            percentText.textContent = '100%';
+            let resText = "Upload complete!";
+            try {
+                const res = JSON.parse(xhr.responseText);
+                resText = res.message || resText;
+            } catch(e){}
+            showToast(resText);
+            fetchDirectoryContents(currentPath);
+        } else {
+            showToast('Upload failed', 'error');
+        }
+        setTimeout(() => {
+            progressContainer.style.display = 'none';
+        }, 1200);
+    };
+
+    xhr.onerror = () => {
+        showToast('Network error during upload', 'error');
+        progressContainer.style.display = 'none';
+    };
+
+    xhr.send(formData);
+}
+
+function formatBytesJS(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    else if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    else return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+
 // Archive Unzip Extraction
 async function extractArchive(path) {
     showToast('Extracting archive...');
@@ -687,56 +782,6 @@ async function deleteSingleItem(path) {
         fetchDirectoryContents(currentPath);
     } catch (err) {
         showToast(`Delete error: ${err.message}`, 'error');
-    }
-}
-
-// Upload Setup
-function setupUploadHandlers() {
-    const dropZone = document.getElementById('drop-zone-wrapper');
-    const fileInput = document.getElementById('file-input');
-
-    ['dragenter', 'dragover'].forEach(name => {
-        dropZone.addEventListener(name, (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        });
-    });
-
-    ['dragleave', 'drop'].forEach(name => {
-        dropZone.addEventListener(name, (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-        });
-    });
-
-    dropZone.addEventListener('drop', (e) => {
-        if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
-    });
-
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length) uploadFiles(e.target.files);
-    });
-}
-
-async function uploadFiles(files) {
-    const formData = new FormData();
-    for (let i = 0; i < files.length; i++) {
-        formData.append('files', files[i]);
-    }
-
-    try {
-        showToast('Uploading files...');
-        const res = await fetch(`/api/files/upload?target_path=${encodeURIComponent(currentPath)}`, {
-            method: 'POST',
-            body: formData
-        });
-        if (!res.ok) throw new Error('Upload failed');
-        const data = await res.json();
-        
-        showToast(data.message);
-        fetchDirectoryContents(currentPath);
-    } catch (err) {
-        showToast('Upload error', 'error');
     }
 }
 
