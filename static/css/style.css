@@ -16,6 +16,45 @@
     --font-mono: 'Fira Code', monospace;
 }
 
+/* Theme Profiles */
+body.theme-vscode {
+    --bg-main: #0B0F19;
+    --bg-card: rgba(23, 31, 49, 0.75);
+    --accent-blue: #3B82F6;
+}
+
+body.theme-monokai {
+    --bg-main: #1D1E19;
+    --bg-card: rgba(39, 40, 34, 0.85);
+    --accent-blue: #F92672;
+    --accent-purple: #AE81FF;
+    --accent-green: #A6E22E;
+}
+
+body.theme-dracula {
+    --bg-main: #1E1F29;
+    --bg-card: rgba(40, 42, 54, 0.85);
+    --accent-blue: #BD93F9;
+    --accent-purple: #FF79C6;
+    --accent-green: #50FA7B;
+}
+
+body.theme-onedark {
+    --bg-main: #1E222A;
+    --bg-card: rgba(33, 37, 43, 0.85);
+    --accent-blue: #61AFEF;
+    --accent-purple: #C678DD;
+    --accent-green: #98C379;
+}
+
+body.theme-cyberpunk {
+    --bg-main: #060814;
+    --bg-card: rgba(18, 16, 38, 0.9);
+    --accent-blue: #00F0FF;
+    --accent-purple: #FF007F;
+    --accent-green: #FFE600;
+}
+
 * {
     box-sizing: border-box;
     margin: 0;
@@ -28,6 +67,7 @@ body {
     color: var(--text-primary);
     min-height: 100vh;
     position: relative;
+    transition: background-color 0.3s ease;
 }
 
 .background-glow {
@@ -147,6 +187,9 @@ h1 {
     transition: width 0.4s ease;
 }
 
+.cpu-fill { background: linear-gradient(90deg, #10B981, #F59E0B); }
+.ram-fill { background: linear-gradient(90deg, #8B5CF6, #EC4899); }
+
 .storage-subtext { font-size: 0.78rem; color: var(--text-secondary); }
 
 .stat-label {
@@ -190,10 +233,10 @@ h1 {
 }
 
 .btn-primary { background: var(--accent-blue); color: white; }
-.btn-primary:hover { background: #2563EB; }
+.btn-primary:hover { opacity: 0.9; }
 
 .btn-accent { background: var(--accent-purple); color: white; cursor: pointer; }
-.btn-accent:hover { background: #7C3AED; }
+.btn-accent:hover { opacity: 0.9; }
 
 .btn-secondary { background: rgba(255, 255, 255, 0.08); color: var(--text-primary); border: 1px solid var(--border-color); }
 .btn-secondary:hover { background: rgba(255, 255, 255, 0.15); }
@@ -357,6 +400,36 @@ h1 {
 .grid-subtext { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.2rem; }
 .grid-actions { display: flex; gap: 0.3rem; margin-top: 0.8rem; flex-wrap: wrap; justify-content: center; }
 
+/* Grep Search Modal */
+.search-input-group { display: flex; gap: 0.6rem; margin-bottom: 1rem; }
+.grep-results-container {
+    max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;
+}
+.grep-item {
+    background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color);
+    border-radius: 10px; padding: 0.8rem; cursor: pointer; transition: background 0.2s;
+}
+.grep-item:hover { background: rgba(255, 255, 255, 0.06); }
+.grep-header { display: flex; justify-content: space-between; font-weight: 600; color: #60A5FA; font-size: 0.85rem; }
+.grep-snippet { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.3rem; white-space: pre-wrap; }
+
+/* Git Client Modal */
+.git-container { display: grid; gap: 1rem; }
+.git-pre { height: 220px; font-family: var(--font-mono); font-size: 0.85rem; }
+
+/* SQLite Database Browser Modal */
+.db-container { display: flex; flex-direction: column; gap: 0.8rem; }
+.db-tables-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; font-size: 0.85rem; }
+.db-table-pill {
+    background: rgba(59, 130, 246, 0.15); border: 1px solid var(--accent-blue);
+    color: #60A5FA; padding: 0.3rem 0.6rem; border-radius: 8px; cursor: pointer;
+}
+.sql-query-bar { display: flex; gap: 0.6rem; }
+.db-table-wrapper { max-height: 380px; overflow: auto; border: 1px solid var(--border-color); border-radius: 10px; }
+.db-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.db-table th, .db-table td { border: 1px solid var(--border-color); padding: 0.6rem 0.8rem; text-align: left; }
+.db-table th { background: rgba(255, 255, 255, 0.08); font-weight: 600; }
+
 /* Web Terminal Drawer */
 .terminal-card {
     background: #0D1117;
@@ -470,7 +543,7 @@ h1 {
 .modal-input {
     width: 100%; padding: 0.75rem; border-radius: 10px;
     border: 1px solid var(--border-color); background: rgba(0, 0, 0, 0.3);
-    color: var(--text-primary); font-size: 0.95rem; margin: 1.2rem 0;
+    color: var(--text-primary); font-size: 0.95rem; margin: 0.5rem 0;
 }
 
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; }

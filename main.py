@@ -1,12 +1,16 @@
 import asyncio
 import os
+import re
 import shutil
+import sqlite3
+import tarfile
 import tempfile
 import time
 import zipfile
 from pathlib import Path
 from typing import List, Optional
 
+import psutil
 import uvicorn
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request, status, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,8 +23,8 @@ import config
 
 app = FastAPI(
     title=config.APP_NAME,
-    description="Advanced Cloud File Manager & Web IDE v2.2 with Terminal",
-    version="2.2.0"
+    description="Ultimate Web IDE & Cloud Suite v3.0",
+    version="3.0.0"
 )
 
 app.add_middleware(
@@ -65,12 +69,22 @@ class MoveItemRequest(BaseModel):
 class CopyItemRequest(BaseModel):
     source_path: str
 
+class ExtractArchiveRequest(BaseModel):
+    archive_path: str = Field(..., description="Relative path of archive to extract")
+
 class BatchPathRequest(BaseModel):
     paths: List[str]
 
 class ExecuteCommandRequest(BaseModel):
     command: str = Field(..., description="Shell command to execute")
     cwd: Optional[str] = Field("", description="Working directory relative to upload root")
+
+class GitCommitRequest(BaseModel):
+    message: str = Field(..., description="Commit message")
+
+class SqlQueryRequest(BaseModel):
+    db_path: str = Field(..., description="Relative path of sqlite database")
+    query: str = Field(..., description="SQL Query to execute")
 
 
 def get_safe_path(relative_path: str = "") -> Path:
@@ -108,7 +122,7 @@ async def serve_dashboard(request: Request):
 async def health_check():
     return {
         "status": "healthy",
-        "version": "2.2.0",
+        "version": "3.0.0",
         "uptime_seconds": round(time.time() - START_TIME, 2),
         "service": config.APP_NAME,
         "environment_port": config.PORT
@@ -124,6 +138,10 @@ async def get_system_info():
     total_disk, used_disk, free_disk = shutil.disk_usage(config.UPLOAD_DIR)
     used_percent = round((used_disk / total_disk) * 100, 1)
     
+    # CPU & RAM Metrics via psutil
+    cpu_usage = psutil.cpu_percent(interval=0.1)
+    virtual_mem = psutil.virtual_memory()
+    
     return {
         "app_name": config.APP_NAME,
         "status": "online",
@@ -138,6 +156,12 @@ async def get_system_info():
             "used_formatted": format_bytes(used_disk),
             "free_formatted": format_bytes(free_disk),
             "used_percent": used_percent
+        },
+        "system": {
+            "cpu_percent": cpu_usage,
+            "ram_total_formatted": format_bytes(virtual_mem.total),
+            "ram_used_formatted": format_bytes(virtual_mem.used),
+            "ram_percent": virtual_mem.percent
         },
         "port": config.PORT,
         "uptime": f"{round(time.time() - START_TIME, 1)}s"
@@ -176,7 +200,8 @@ async def list_directory_contents(
             "is_image": ext in config.IMAGE_EXTENSIONS,
             "is_audio": ext in config.AUDIO_EXTENSIONS,
             "is_video": ext in config.VIDEO_EXTENSIONS,
-            "is_archive": ext in config.ARCHIVE_EXTENSIONS
+            "is_archive": ext in config.ARCHIVE_EXTENSIONS,
+            "is_db": ext in config.DATABASE_EXTENSIONS
         })
 
     # Sort Logic
@@ -199,6 +224,151 @@ async def list_directory_contents(
         "current_path": rel_current,
         "items": sorted_items
     }
+
+
+# 1-Click ZIP / Tar Extraction Endpoint
+@app.post("/api/files/extract")
+async def extract_archive(req: ExtractArchiveRequest):
+    archive_file = get_safe_path(req.archive_path)
+    if not archive_file.exists() or not archive_file.is_file():
+        raise HTTPException(status_code=404, detail="Archive file not found")
+        
+    extract_target = archive_file.parent
+    filename = archive_file.name.lower()
+    
+    try:
+        if filename.endswith(".zip"):
+            with zipfile.ZipFile(archive_file, 'r') as zip_ref:
+                zip_ref.extractall(extract_target)
+        elif filename.endswith((".tar.gz", ".tgz", ".tar")):
+            mode = "r:gz" if (filename.endswith(".tar.gz") or filename.endswith(".tgz")) else "r"
+            with tarfile.open(archive_file, mode) as tar_ref:
+                tar_ref.extractall(extract_target)
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported archive format")
+            
+        return {"message": f"Successfully extracted '{archive_file.name}'"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Extraction error: {str(e)}")
+
+
+# Full-Text Grep Code Search Endpoint
+@app.get("/api/search/grep")
+async def grep_code_search(
+    query: str = Query(..., description="Keyword or regex to search"),
+    path: str = Query("", description="Relative path subfolder to search in")
+):
+    if not query.strip():
+        return {"results": []}
+        
+    target_dir = get_safe_path(path)
+    if not target_dir.exists() or not target_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Search directory not found")
+        
+    results = []
+    pattern = re.compile(re.escape(query), re.IGNORECASE)
+    
+    for file_path in target_dir.rglob("*"):
+        if not file_path.is_file() or file_path.name == ".gitkeep":
+            continue
+        ext = file_path.suffix.lstrip(".").lower()
+        if ext not in config.TEXT_EXTENSIONS:
+            continue
+            
+        rel_path = str(file_path.relative_to(config.UPLOAD_DIR)).replace("\\", "/")
+        try:
+            with file_path.open("r", encoding="utf-8", errors="replace") as f:
+                for line_num, line_content in enumerate(f, 1):
+                    if pattern.search(line_content):
+                        results.append({
+                            "path": rel_path,
+                            "filename": file_path.name,
+                            "line_num": line_num,
+                            "line_content": line_content.strip()[:200]
+                        })
+                        if len(results) >= 200: # Limit max results
+                            break
+        except Exception:
+            continue
+            
+    return {"query": query, "total_matches": len(results), "results": results}
+
+
+# In-Browser Git Client Endpoints
+@app.get("/api/git/status")
+async def get_git_status():
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            "git status",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(config.BASE_DIR)
+        )
+        stdout, stderr = await proc.communicate()
+        return {
+            "status_output": stdout.decode("utf-8", errors="replace"),
+            "error": stderr.decode("utf-8", errors="replace")
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/git/log")
+async def get_git_log():
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            "git log -n 10 --pretty=format:'%h - %an, %ar : %s'",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(config.BASE_DIR)
+        )
+        stdout, _ = await proc.communicate()
+        lines = stdout.decode("utf-8", errors="replace").split("\n")
+        return {"commits": [l for l in lines if l.strip()]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# SQLite Database Browser Endpoints
+@app.get("/api/db/tables")
+async def get_db_tables(db_path: str = Query(..., description="Relative path of db file")):
+    file_p = get_safe_path(db_path)
+    if not file_p.exists() or not file_p.is_file():
+        raise HTTPException(status_code=404, detail="Database file not found")
+        
+    try:
+        conn = sqlite3.connect(str(file_p))
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return {"db_path": db_path, "tables": tables}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SQLite Error: {str(e)}")
+
+
+@app.post("/api/db/query")
+async def run_sql_query(req: SqlQueryRequest):
+    file_p = get_safe_path(req.db_path)
+    if not file_p.exists() or not file_p.is_file():
+        raise HTTPException(status_code=404, detail="Database file not found")
+        
+    try:
+        conn = sqlite3.connect(str(file_p))
+        cursor = conn.cursor()
+        cursor.execute(req.query)
+        
+        if cursor.description:
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchmany(100) # Max 100 rows preview
+            conn.close()
+            return {"columns": columns, "rows": rows, "count": len(rows)}
+        else:
+            conn.commit()
+            conn.close()
+            return {"columns": ["Status"], "rows": [["Query executed successfully"]], "count": 1}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"SQL Query Error: {str(e)}")
 
 
 @app.post("/api/folders")
@@ -324,24 +494,6 @@ async def copy_item(req: CopyItemRequest):
     return {"message": f"Created duplicate '{copy_name}'", "new_name": copy_name}
 
 
-@app.post("/api/files/move")
-async def move_item(req: MoveItemRequest):
-    source_path = get_safe_path(req.source_path)
-    target_dir = get_safe_path(req.target_folder)
-    
-    if not source_path.exists():
-        raise HTTPException(status_code=404, detail="Source item not found")
-    if not target_dir.exists() or not target_dir.is_dir():
-        raise HTTPException(status_code=404, detail="Target directory not found")
-        
-    destination_path = target_dir / source_path.name
-    if destination_path.exists():
-        raise HTTPException(status_code=400, detail="An item with the same name exists in target folder")
-        
-    shutil.move(str(source_path), str(destination_path))
-    return {"message": f"Moved '{source_path.name}' to target directory"}
-
-
 @app.get("/api/files/view/{file_path:path}")
 async def view_raw_file(file_path: str):
     target_path = get_safe_path(file_path)
@@ -427,7 +579,6 @@ async def execute_terminal_command(req: ExecuteCommandRequest):
             cwd=str(working_dir)
         )
         
-        # Enforce 30-second execution timeout
         try:
             stdout_bytes, stderr_bytes = await asyncio.wait_for(process.communicate(), timeout=30.0)
         except asyncio.TimeoutError:
@@ -445,7 +596,6 @@ async def execute_terminal_command(req: ExecuteCommandRequest):
         stdout_str = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
         stderr_str = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
         
-        # Truncate very long outputs
         if len(stdout_str) > 50000:
             stdout_str = stdout_str[:50000] + "\n... [Output truncated at 50KB]"
         if len(stderr_str) > 50000:

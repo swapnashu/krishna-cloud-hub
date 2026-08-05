@@ -8,6 +8,7 @@ let searchQuery = "";
 let sortBy = "name";
 let sortOrder = "asc";
 let currentEditingPath = "";
+let currentActiveDbPath = "";
 
 // Terminal State
 let terminalHistory = [];
@@ -26,12 +27,23 @@ async function fetchSystemInfo() {
         const data = await res.json();
         
         document.getElementById('stat-status').textContent = 'Online 🟢';
-        document.getElementById('stat-files').textContent = data.total_files;
+        document.getElementById('stat-files').textContent = `Files: ${data.total_files}`;
         
+        // Disk metrics
         if (data.disk) {
             document.getElementById('storage-percent').textContent = `${data.disk.used_percent}%`;
             document.getElementById('storage-fill').style.width = `${Math.min(data.disk.used_percent, 100)}%`;
             document.getElementById('stat-disk-subtext').textContent = `Free: ${data.disk.free_formatted} / Total: ${data.disk.total_formatted}`;
+        }
+
+        // CPU & RAM metrics
+        if (data.system) {
+            document.getElementById('cpu-percent').textContent = `${data.system.cpu_percent}%`;
+            document.getElementById('cpu-fill').style.width = `${Math.min(data.system.cpu_percent, 100)}%`;
+            
+            document.getElementById('ram-percent').textContent = `${data.system.ram_percent}%`;
+            document.getElementById('ram-fill').style.width = `${Math.min(data.system.ram_percent, 100)}%`;
+            document.getElementById('stat-ram-subtext').textContent = `Used: ${data.system.ram_used_formatted} / ${data.system.ram_total_formatted}`;
         }
         
         document.getElementById('stat-uptime').textContent = `:${data.port} | ${data.uptime}`;
@@ -120,7 +132,7 @@ function renderExplorer() {
             <div class="file-item-row">
                 <input type="checkbox" ${selectedPaths.has(item.path) ? 'checked' : ''} onchange="toggleItemSelect('${escapeHtml(item.path)}', this)">
                 <span class="item-icon">${getItemIcon(item)}</span>
-                <span class="item-title" onclick="handleItemClick('${escapeHtml(item.path)}', ${item.is_dir}, ${item.is_text}, ${item.is_image}, ${item.is_audio}, ${item.is_video})">
+                <span class="item-title" onclick="handleItemClick('${escapeHtml(item.path)}', ${item.is_dir}, ${item.is_text}, ${item.is_image}, ${item.is_audio}, ${item.is_video}, ${item.is_db})">
                     ${escapeHtml(item.name)}
                 </span>
                 <span class="item-size">${item.size_formatted}</span>
@@ -136,7 +148,7 @@ function renderExplorer() {
             <div class="file-grid-card">
                 <input type="checkbox" class="grid-checkbox" ${selectedPaths.has(item.path) ? 'checked' : ''} onchange="toggleItemSelect('${escapeHtml(item.path)}', this)">
                 <div class="grid-icon">${getItemIcon(item)}</div>
-                <div class="grid-title" onclick="handleItemClick('${escapeHtml(item.path)}', ${item.is_dir}, ${item.is_text}, ${item.is_image}, ${item.is_audio}, ${item.is_video})">
+                <div class="grid-title" onclick="handleItemClick('${escapeHtml(item.path)}', ${item.is_dir}, ${item.is_text}, ${item.is_image}, ${item.is_audio}, ${item.is_video}, ${item.is_db})">
                     ${escapeHtml(item.name)}
                 </div>
                 <div class="grid-subtext">${item.is_dir ? 'Folder' : item.size_formatted}</div>
@@ -150,6 +162,7 @@ function renderExplorer() {
 
 function getItemIcon(item) {
     if (item.is_dir) return '📁';
+    if (item.is_db) return '📊';
     if (item.is_image) return '🖼️';
     if (item.is_audio) return '🎵';
     if (item.is_video) return '🎬';
@@ -170,6 +183,12 @@ function getItemActionButtons(item, isGrid = false) {
                 btns += `<button class="btn btn-accent btn-small" onclick="runScriptFile('${escapeHtml(item.path)}', '${item.extension}')" title="Run Script">▶️</button>`;
             }
         }
+        if (item.is_archive) {
+            btns += `<button class="btn btn-accent btn-small" onclick="extractArchive('${escapeHtml(item.path)}')" title="Extract Archive">📦 Unzip</button>`;
+        }
+        if (item.is_db) {
+            btns += `<button class="btn btn-primary btn-small" onclick="openDbBrowser('${escapeHtml(item.path)}')">📊 Browse DB</button>`;
+        }
         if (item.is_image || item.is_audio || item.is_video) {
             btns += `<button class="btn btn-accent btn-small" onclick="openPreview('${escapeHtml(item.path)}', ${item.is_image}, ${item.is_audio}, ${item.is_video})">👁️ Preview</button>`;
         }
@@ -184,15 +203,172 @@ function getItemActionButtons(item, isGrid = false) {
     return btns;
 }
 
-function handleItemClick(path, isDir, isText, isImage, isAudio, isVideo) {
+function handleItemClick(path, isDir, isText, isImage, isAudio, isVideo, isDb) {
     if (isDir) {
         fetchDirectoryContents(path);
+    } else if (isDb) {
+        openDbBrowser(path);
     } else if (isText) {
         openEditor(path);
     } else if (isImage || isAudio || isVideo) {
         openPreview(path, isImage, isAudio, isVideo);
     } else {
         window.open(`/api/files/view/${encodeURIComponent(path)}`, '_blank');
+    }
+}
+
+// Archive Unzip Extraction
+async function extractArchive(path) {
+    showToast('Extracting archive...');
+    try {
+        const res = await fetch('/api/files/extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ archive_path: path })
+        });
+        if (!res.ok) throw new Error('Extraction failed');
+        const data = await res.json();
+        
+        showToast(data.message);
+        fetchDirectoryContents(currentPath);
+    } catch (err) {
+        showToast(`Extraction error: ${err.message}`, 'error');
+    }
+}
+
+// Full-Text Grep Search
+async function submitGrepSearch() {
+    const input = document.getElementById('grep-query-input');
+    const query = input.value.trim();
+    if (!query) return;
+    
+    const resultsContainer = document.getElementById('grep-results-list');
+    resultsContainer.innerHTML = '<div class="empty-state">Searching across all code files...</div>';
+    
+    try {
+        const res = await fetch(`/api/search/grep?query=${encodeURIComponent(query)}&path=${encodeURIComponent(currentPath)}`);
+        if (!res.ok) throw new Error('Grep search failed');
+        const data = await res.json();
+        
+        if (data.results.length === 0) {
+            resultsContainer.innerHTML = `<div class="empty-state">No occurrences of "${escapeHtml(query)}" found.</div>`;
+            return;
+        }
+        
+        resultsContainer.innerHTML = data.results.map(r => `
+            <div class="grep-item" onclick="closeModal('grep-search-modal'); openEditor('${escapeHtml(r.path)}')">
+                <div class="grep-header">
+                    <span>📄 ${escapeHtml(r.path)}</span>
+                    <span>Line ${r.line_num}</span>
+                </div>
+                <div class="grep-snippet">${escapeHtml(r.line_content)}</div>
+            </div>
+        `).join('');
+    } catch (err) {
+        resultsContainer.innerHTML = `<div class="empty-state">Error executing Grep search: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+// Git Client
+async function openGitModal() {
+    openModal('git-modal');
+    fetchGitStatus();
+}
+
+async function fetchGitStatus() {
+    const statusPre = document.getElementById('git-status-output');
+    statusPre.textContent = 'Loading git status...';
+    try {
+        const res = await fetch('/api/git/status');
+        const data = await res.json();
+        statusPre.textContent = data.status_output || data.error || 'Clean working tree';
+    } catch (err) {
+        statusPre.textContent = 'Error fetching git status';
+    }
+}
+
+async function submitGitCommit() {
+    const msg = document.getElementById('git-commit-msg').value.trim();
+    if (!msg) return showToast('Please enter a commit message', 'error');
+    runQuickCommand(`git add . && git commit -m "${msg}"`);
+    closeModal('git-modal');
+}
+
+async function submitGitPush() {
+    runQuickCommand(`git push origin main`);
+    closeModal('git-modal');
+}
+
+// SQLite DB Browser
+async function openDbBrowser(path) {
+    currentActiveDbPath = path;
+    document.getElementById('db-title').textContent = `📊 SQLite DB Browser: ${path.split('/').pop()}`;
+    openModal('db-modal');
+    
+    const tablesBar = document.getElementById('db-tables-list');
+    tablesBar.innerHTML = '<span>Loading tables...</span>';
+    
+    try {
+        const res = await fetch(`/api/db/tables?db_path=${encodeURIComponent(path)}`);
+        if (!res.ok) throw new Error('DB fetch failed');
+        const data = await res.json();
+        
+        if (data.tables.length === 0) {
+            tablesBar.innerHTML = '<span>No tables found in database.</span>';
+            return;
+        }
+        
+        tablesBar.innerHTML = '<span>Tables: </span>' + data.tables.map(tbl => `
+            <span class="db-table-pill" onclick="loadDbTable('${escapeHtml(tbl)}')">${escapeHtml(tbl)}</span>
+        `).join(' ');
+        
+        loadDbTable(data.tables[0]);
+    } catch (err) {
+        tablesBar.innerHTML = `<span>Error: ${escapeHtml(err.message)}</span>`;
+    }
+}
+
+function loadDbTable(tableName) {
+    const queryInput = document.getElementById('sql-query-input');
+    queryInput.value = `SELECT * FROM ${tableName} LIMIT 50;`;
+    submitSqlQuery();
+}
+
+async function submitSqlQuery() {
+    if (!currentActiveDbPath) return;
+    const query = document.getElementById('sql-query-input').value.trim();
+    if (!query) return;
+    
+    const wrapper = document.getElementById('db-results-grid');
+    wrapper.innerHTML = '<div class="empty-state">Running SQL Query...</div>';
+    
+    try {
+        const res = await fetch('/api/db/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ db_path: currentActiveDbPath, query: query })
+        });
+        
+        if (!res.ok) {
+            const errData = await res.json();
+            throw new Error(errData.detail || 'SQL Query failed');
+        }
+        const data = await res.json();
+        
+        let html = '<table class="db-table"><thead><tr>';
+        data.columns.forEach(col => { html += `<th>${escapeHtml(col)}</th>`; });
+        html += '</tr></thead><tbody>';
+        
+        data.rows.forEach(row => {
+            html += '<tr>';
+            row.forEach(val => { html += `<td>${escapeHtml(String(val))}</td>`; });
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        
+        wrapper.innerHTML = html;
+    } catch (err) {
+        wrapper.innerHTML = `<div class="empty-state" style="color: #EF4444;">${escapeHtml(err.message)}</div>`;
     }
 }
 
@@ -257,7 +433,6 @@ function runScriptFile(path, ext) {
     else if (ext === "sh") runnerCmd = `bash "${filename}"`;
     else runnerCmd = `"${filename}"`;
     
-    // Open terminal drawer and execute
     const terminalDrawer = document.getElementById('terminal-drawer');
     terminalDrawer.style.display = 'block';
     terminalDrawer.scrollIntoView({ behavior: 'smooth' });
@@ -320,7 +495,6 @@ async function executeTerminalCommand(cmd, cwdOverride = null) {
     const targetCwd = cwdOverride !== null ? cwdOverride : currentPath;
     const cwdDisplay = targetCwd ? `uploads/${targetCwd}` : 'uploads/';
     
-    // Append command line
     const cmdLine = document.createElement('div');
     cmdLine.className = 'terminal-line log-cmd';
     cmdLine.textContent = `$ ${cwdDisplay}> ${cmd}`;
@@ -644,7 +818,12 @@ async function deleteSelectedItems() {
     }
 }
 
-// UI Filters & Sorting
+// UI Filters, Sorting & Themes
+function handleThemeChange(themeClass) {
+    document.body.className = themeClass;
+    showToast(`Theme changed to ${themeClass.replace('theme-', '')}`);
+}
+
 function handleSortChange() {
     sortBy = document.getElementById('sort-by-select').value;
     fetchDirectoryContents(currentPath);

@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Advanced Cloud File Manager & Web IDE v2.2 with Integrated Web Terminal">
-    <title>Advanced Cloud File Hub & IDE</title>
+    <meta name="description" content="Ultimate Web IDE & Cloud Suite v3.0 with Grep Search, Git Client, and SQLite Browser">
+    <title>Ultimate Cloud Web IDE & Suite v3.0</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
-<body>
+<body class="theme-vscode">
     <div class="background-glow"></div>
     
     <div class="container">
@@ -20,7 +20,7 @@
             <div class="brand">
                 <div class="logo">⚡</div>
                 <div>
-                    <h1>Advanced Cloud File Hub & IDE</h1>
+                    <h1>Ultimate Cloud Web IDE & Suite</h1>
                     <p class="subtitle">Python FastAPI • Multi-Cloud Ready (Render, Railway, Fly.io)</p>
                 </div>
             </div>
@@ -31,19 +31,15 @@
             </div>
         </header>
 
-        <!-- Stats Bar & Disk Space Gauge -->
+        <!-- Stats Bar: System Status, Disk Gauge, CPU & RAM Gauges -->
         <div class="stats-grid">
             <div class="stat-card">
                 <span class="stat-label">System Status</span>
                 <div class="stat-value online" id="stat-status">Checking...</div>
             </div>
-            <div class="stat-card">
-                <span class="stat-label">Total Files</span>
-                <div class="stat-value" id="stat-files">0</div>
-            </div>
             <div class="stat-card storage-card">
                 <div class="storage-header">
-                    <span class="stat-label">Available System Disk Space</span>
+                    <span class="stat-label">Available Disk Space</span>
                     <span class="storage-percent" id="storage-percent">0%</span>
                 </div>
                 <div class="storage-gauge">
@@ -52,8 +48,24 @@
                 <div class="storage-subtext" id="stat-disk-subtext">Free: -- / Total: --</div>
             </div>
             <div class="stat-card">
-                <span class="stat-label">Port / Uptime</span>
-                <div class="stat-value" id="stat-uptime">--</div>
+                <div class="storage-header">
+                    <span class="stat-label">CPU Usage</span>
+                    <span class="storage-percent" id="cpu-percent">0%</span>
+                </div>
+                <div class="storage-gauge">
+                    <div class="storage-fill cpu-fill" id="cpu-fill" style="width: 0%;"></div>
+                </div>
+                <div class="storage-subtext" id="stat-files">Files: 0</div>
+            </div>
+            <div class="stat-card">
+                <div class="storage-header">
+                    <span class="stat-label">RAM Usage</span>
+                    <span class="storage-percent" id="ram-percent">0%</span>
+                </div>
+                <div class="storage-gauge">
+                    <div class="storage-fill ram-fill" id="ram-fill" style="width: 0%;"></div>
+                </div>
+                <div class="storage-subtext" id="stat-ram-subtext">Used: -- / --</div>
             </div>
         </div>
 
@@ -64,14 +76,25 @@
                     <button class="btn btn-primary" onclick="openModal('new-folder-modal')">📁 New Folder</button>
                     <button class="btn btn-primary" onclick="openModal('new-file-modal')">📝 New File</button>
                     <label for="file-input" class="btn btn-accent">☁️ Upload Files</label>
+                    <button class="btn btn-secondary" onclick="openModal('grep-search-modal')">🔍 Grep Search</button>
+                    <button class="btn btn-secondary" onclick="openGitModal()">🐙 Git Client</button>
                     <button class="btn btn-secondary" onclick="toggleTerminal()">>_ Web Terminal</button>
                     <input type="file" id="file-input" multiple hidden>
                 </div>
                 
                 <div class="toolbar-controls">
+                    <!-- Theme Selector -->
+                    <select id="theme-select" class="select-input" onchange="handleThemeChange(this.value)">
+                        <option value="theme-vscode">🎨 VS Code Dark</option>
+                        <option value="theme-monokai">🎨 Monokai</option>
+                        <option value="theme-dracula">🎨 Dracula</option>
+                        <option value="theme-onedark">🎨 One Dark</option>
+                        <option value="theme-cyberpunk">🎨 Cyberpunk</option>
+                    </select>
+
                     <div class="search-box">
                         <span class="search-icon">🔍</span>
-                        <input type="text" id="search-input" placeholder="Search files..." oninput="handleSearch()">
+                        <input type="text" id="search-input" placeholder="Search filenames..." oninput="handleSearch()">
                     </div>
 
                     <div class="sort-controls">
@@ -152,13 +175,11 @@
                     </div>
                 </div>
                 
-                <!-- Terminal Output Window -->
                 <div class="terminal-console" id="terminal-console">
-                    <div class="terminal-line log-system">Welcome to Advanced Cloud File Manager Web Terminal v2.2</div>
+                    <div class="terminal-line log-system">Welcome to Ultimate Web IDE Web Terminal v3.0</div>
                     <div class="terminal-line log-system">Run shell commands, execute Python scripts (`python script.py`), or check server info.</div>
                 </div>
 
-                <!-- Command Input Line -->
                 <div class="terminal-input-bar">
                     <span class="terminal-prompt">$</span>
                     <input type="text" id="terminal-cmd-input" class="terminal-input" placeholder="Type shell command (e.g. python script.py, ls, pwd) and press Enter..." onkeydown="handleTerminalKeyDown(event)">
@@ -173,6 +194,72 @@
     </div>
 
     <!-- Modals -->
+
+    <!-- Full-Text Grep Search Modal -->
+    <div class="modal-overlay" id="grep-search-modal">
+        <div class="modal-card modal-large">
+            <div class="editor-header">
+                <h3>🔍 Full-Text Code Search (Grep)</h3>
+                <button class="btn btn-secondary" onclick="closeModal('grep-search-modal')">Close</button>
+            </div>
+            <div class="search-input-group">
+                <input type="text" id="grep-query-input" class="modal-input" placeholder="Search keywords, functions, or variables across all code files..." onkeydown="if(event.key==='Enter') submitGrepSearch()">
+                <button class="btn btn-primary" onclick="submitGrepSearch()">Search Code</button>
+            </div>
+            <div class="grep-results-container" id="grep-results-list">
+                <div class="empty-state">Enter a search keyword above.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Git Client Modal -->
+    <div class="modal-overlay" id="git-modal">
+        <div class="modal-card modal-large">
+            <div class="editor-header">
+                <h3>🐙 In-Browser Git Client</h3>
+                <div class="editor-actions">
+                    <button class="btn btn-secondary" onclick="fetchGitStatus()">🔄 Refresh Status</button>
+                    <button class="btn btn-secondary" onclick="closeModal('git-modal')">Close</button>
+                </div>
+            </div>
+            <div class="git-container">
+                <div class="git-status-box">
+                    <h4>Git Status</h4>
+                    <pre id="git-status-output" class="code-textarea git-pre">Loading git status...</pre>
+                </div>
+                <div class="git-actions-box card">
+                    <h4>Commit & Push</h4>
+                    <input type="text" id="git-commit-msg" class="modal-input" placeholder="Commit message (e.g. Update feature)">
+                    <div class="modal-actions">
+                        <button class="btn btn-primary" onclick="submitGitCommit()">git commit</button>
+                        <button class="btn btn-accent" onclick="submitGitPush()">git push</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SQLite Database Viewer Modal -->
+    <div class="modal-overlay" id="db-modal">
+        <div class="modal-card modal-large">
+            <div class="editor-header">
+                <h3 id="db-title">📊 SQLite Database Browser</h3>
+                <button class="btn btn-secondary" onclick="closeModal('db-modal')">Close</button>
+            </div>
+            <div class="db-container">
+                <div class="db-tables-bar" id="db-tables-list">
+                    <span>Tables: Loading...</span>
+                </div>
+                <div class="sql-query-bar">
+                    <input type="text" id="sql-query-input" class="modal-input" placeholder="SELECT * FROM table_name LIMIT 50;">
+                    <button class="btn btn-primary" onclick="submitSqlQuery()">Run SQL Query</button>
+                </div>
+                <div class="db-table-wrapper" id="db-results-grid">
+                    <div class="empty-state">Select a table or run an SQL query.</div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- New Folder Modal -->
     <div class="modal-overlay" id="new-folder-modal">
