@@ -89,7 +89,12 @@ def format_bytes(size: int) -> str:
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request, "app_name": config.APP_NAME})
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={"app_name": config.APP_NAME}
+    )
+
 
 
 @app.get("/healthz", status_code=status.HTTP_200_OK)
