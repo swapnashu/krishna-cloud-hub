@@ -9,7 +9,7 @@ from typing import List, Optional
 import uvicorn
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request, status, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -18,8 +18,8 @@ import config
 
 app = FastAPI(
     title=config.APP_NAME,
-    description="Advanced Cloud File Manager & Web IDE with multi-cloud support",
-    version="2.0.0"
+    description="Advanced Cloud File Manager & Web IDE v2.1",
+    version="2.1.0"
 )
 
 app.add_middleware(
@@ -61,6 +61,9 @@ class MoveItemRequest(BaseModel):
     source_path: str
     target_folder: str
 
+class CopyItemRequest(BaseModel):
+    source_path: str
+
 class BatchPathRequest(BaseModel):
     paths: List[str]
 
@@ -96,12 +99,11 @@ async def serve_dashboard(request: Request):
     )
 
 
-
 @app.get("/healthz", status_code=status.HTTP_200_OK)
 async def health_check():
     return {
         "status": "healthy",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "uptime_seconds": round(time.time() - START_TIME, 2),
         "service": config.APP_NAME,
         "environment_port": config.PORT
@@ -111,21 +113,38 @@ async def health_check():
 @app.get("/api/info")
 async def get_system_info():
     all_files = [p for p in config.UPLOAD_DIR.rglob("*") if p.is_file() and p.name != ".gitkeep"]
-    total_size = sum(f.stat().st_size for f in all_files)
+    upload_storage_bytes = sum(f.stat().st_size for f in all_files)
+    
+    # Disk Usage Metrics
+    total_disk, used_disk, free_disk = shutil.disk_usage(config.UPLOAD_DIR)
+    used_percent = round((used_disk / total_disk) * 100, 1)
     
     return {
         "app_name": config.APP_NAME,
         "status": "online",
         "total_files": len(all_files),
-        "total_storage_bytes": total_size,
-        "total_storage_formatted": format_bytes(total_size),
+        "upload_storage_bytes": upload_storage_bytes,
+        "upload_storage_formatted": format_bytes(upload_storage_bytes),
+        "disk": {
+            "total_bytes": total_disk,
+            "used_bytes": used_disk,
+            "free_bytes": free_disk,
+            "total_formatted": format_bytes(total_disk),
+            "used_formatted": format_bytes(used_disk),
+            "free_formatted": format_bytes(free_disk),
+            "used_percent": used_percent
+        },
         "port": config.PORT,
         "uptime": f"{round(time.time() - START_TIME, 1)}s"
     }
 
 
 @app.get("/api/files")
-async def list_directory_contents(path: str = Query("", description="Relative path in uploads folder")):
+async def list_directory_contents(
+    path: str = Query("", description="Relative path in uploads folder"),
+    sort_by: str = Query("name", description="Sort by: name, size, date"),
+    sort_order: str = Query("asc", description="Sort order: asc, desc")
+):
     target_dir = get_safe_path(path)
     if not target_dir.exists() or not target_dir.is_dir():
         raise HTTPException(status_code=404, detail="Directory not found")
@@ -145,6 +164,7 @@ async def list_directory_contents(path: str = Query("", description="Relative pa
             "is_dir": item.is_dir(),
             "size_bytes": stat_info.st_size if item.is_file() else 0,
             "size_formatted": format_bytes(stat_info.st_size) if item.is_file() else "--",
+            "modified_timestamp": stat_info.st_mtime,
             "modified": time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(stat_info.st_mtime)),
             "extension": ext,
             "is_text": ext in config.TEXT_EXTENSIONS,
@@ -154,8 +174,17 @@ async def list_directory_contents(path: str = Query("", description="Relative pa
             "is_archive": ext in config.ARCHIVE_EXTENSIONS
         })
 
-    # Directories first, then files sorted alphabetically
-    sorted_items = sorted(items, key=lambda x: (not x["is_dir"], x["name"].lower()))
+    # Sort Logic
+    reverse_flag = (sort_order.lower() == "desc")
+    if sort_by == "size":
+        items.sort(key=lambda x: x["size_bytes"], reverse=reverse_flag)
+    elif sort_by == "date":
+        items.sort(key=lambda x: x["modified_timestamp"], reverse=reverse_flag)
+    else: # name
+        items.sort(key=lambda x: x["name"].lower(), reverse=reverse_flag)
+
+    # Directories stay grouped first
+    sorted_items = sorted(items, key=lambda x: not x["is_dir"])
     
     rel_current = str(target_dir.relative_to(config.UPLOAD_DIR)).replace("\\", "/")
     if rel_current == ".":
@@ -254,6 +283,40 @@ async def rename_item(req: RenameItemRequest):
         
     source_path.rename(destination_path)
     return {"message": f"Renamed to '{clean_new_name}'"}
+
+
+@app.post("/api/files/copy")
+async def copy_item(req: CopyItemRequest):
+    source_path = get_safe_path(req.source_path)
+    if not source_path.exists():
+        raise HTTPException(status_code=404, detail="Source item not found")
+        
+    parent_dir = source_path.parent
+    base_name = source_path.stem
+    ext = source_path.suffix
+    
+    if source_path.is_file():
+        copy_name = f"{base_name}_copy{ext}"
+        copy_path = parent_dir / copy_name
+        counter = 1
+        while copy_path.exists():
+            copy_name = f"{base_name}_copy_{counter}{ext}"
+            copy_path = parent_dir / copy_name
+            counter += 1
+            
+        shutil.copy2(str(source_path), str(copy_path))
+    else: # directory
+        copy_name = f"{source_path.name}_copy"
+        copy_path = parent_dir / copy_name
+        counter = 1
+        while copy_path.exists():
+            copy_name = f"{source_path.name}_copy_{counter}"
+            copy_path = parent_dir / copy_name
+            counter += 1
+            
+        shutil.copytree(str(source_path), str(copy_path))
+        
+    return {"message": f"Created duplicate '{copy_name}'", "new_name": copy_name}
 
 
 @app.post("/api/files/move")

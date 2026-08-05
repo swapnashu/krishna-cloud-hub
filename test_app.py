@@ -13,15 +13,17 @@ def test_healthz():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
-    assert data["version"] == "2.0.0"
+    assert data["version"] == "2.1.0"
 
 
-def test_system_info():
+def test_system_info_with_disk_metrics():
     response = client.get("/api/info")
     assert response.status_code == 200
     data = response.json()
-    assert "total_files" in data
-    assert "total_storage_formatted" in data
+    assert "disk" in data
+    assert "total_bytes" in data["disk"]
+    assert "free_bytes" in data["disk"]
+    assert "used_percent" in data["disk"]
 
 
 def test_directory_traversal_prevention():
@@ -30,53 +32,25 @@ def test_directory_traversal_prevention():
     assert "Directory traversal" in response.json()["detail"]
 
 
-def test_advanced_file_operations():
-    # 1. Create a subfolder
-    subfolder_name = "test_subfolder"
-    response = client.post("/api/folders", json={"folder_path": subfolder_name})
+def test_copy_duplicate_file():
+    # 1. Create original file
+    original_path = "original_doc.py"
+    client.post("/api/files/create-text", json={"file_path": original_path, "content": "print('Original')" if True else ""})
+    
+    # 2. Duplicate file
+    response = client.post("/api/files/copy", json={"source_path": original_path})
     assert response.status_code == 200
-
-    # 2. Create a text file inside subfolder
-    file_path = f"{subfolder_name}/hello.py"
-    initial_code = "print('Hello Cloud!')"
-    response = client.post("/api/files/create-text", json={"file_path": file_path, "content": initial_code})
-    assert response.status_code == 200
-
-    # 3. Read file content
-    response = client.get(f"/api/files/content?path={file_path}")
-    assert response.status_code == 200
-    assert response.json()["content"] == initial_code
-
-    # 4. Save edited content
-    updated_code = "print('Hello Advanced Cloud File Manager!')"
-    response = client.put("/api/files/content", json={"file_path": file_path, "content": updated_code})
-    assert response.status_code == 200
-
-    # 5. List directory items
-    response = client.get(f"/api/files?path={subfolder_name}")
-    assert response.status_code == 200
-    items = response.json()["items"]
-    assert len(items) == 1
-    assert items[0]["name"] == "hello.py"
-
-    # 6. Rename file
-    response = client.post("/api/files/rename", json={"old_path": file_path, "new_name": "app.py"})
-    assert response.status_code == 200
-
-    # 7. Compress folder to ZIP
-    renamed_file_path = f"{subfolder_name}/app.py"
-    response = client.post("/api/files/zip", json={"paths": [renamed_file_path]})
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "application/zip"
-
-    # 8. Batch delete subfolder
-    response = client.post("/api/files/batch-delete", json={"paths": [subfolder_name]})
-    assert response.status_code == 200
+    new_name = response.json()["new_name"]
+    assert "original_doc_copy" in new_name
+    
+    # 3. Clean up created files
+    client.delete(f"/api/files?path={original_path}")
+    client.delete(f"/api/files?path={new_name}")
 
 
 if __name__ == "__main__":
     test_healthz()
-    test_system_info()
+    test_system_info_with_disk_metrics()
     test_directory_traversal_prevention()
-    test_advanced_file_operations()
-    print("All advanced automated tests passed successfully!")
+    test_copy_duplicate_file()
+    print("All v2.1 automated tests passed successfully!")

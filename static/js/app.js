@@ -5,6 +5,8 @@ let selectedPaths = new Set();
 let viewMode = "list";
 let activeFilter = "all";
 let searchQuery = "";
+let sortBy = "name";
+let sortOrder = "asc";
 let currentEditingPath = "";
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -21,7 +23,13 @@ async function fetchSystemInfo() {
         
         document.getElementById('stat-status').textContent = 'Online 🟢';
         document.getElementById('stat-files').textContent = data.total_files;
-        document.getElementById('stat-storage').textContent = data.total_storage_formatted;
+        
+        if (data.disk) {
+            document.getElementById('storage-percent').textContent = `${data.disk.used_percent}%`;
+            document.getElementById('storage-fill').style.width = `${Math.min(data.disk.used_percent, 100)}%`;
+            document.getElementById('stat-disk-subtext').textContent = `Free: ${data.disk.free_formatted} / Total: ${data.disk.total_formatted}`;
+        }
+        
         document.getElementById('stat-uptime').textContent = `:${data.port} | ${data.uptime}`;
     } catch (err) {
         document.getElementById('stat-status').textContent = 'Offline 🔴';
@@ -40,7 +48,8 @@ async function fetchDirectoryContents(path = "") {
     renderBreadcrumbs();
 
     try {
-        const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+        const url = `/api/files?path=${encodeURIComponent(path)}&sort_by=${sortBy}&sort_order=${sortOrder}`;
+        const res = await fetch(url);
         if (!res.ok) throw new Error('Directory fetch failed');
         const data = await res.json();
         
@@ -80,11 +89,9 @@ function renderExplorer() {
     const container = document.getElementById('explorer-body');
     
     let filtered = currentItems.filter(item => {
-        // Search filter
         if (searchQuery && !item.name.toLowerCase().includes(searchQuery.toLowerCase())) {
             return false;
         }
-        // Type filter
         if (activeFilter === "code") return item.is_dir || item.is_text;
         if (activeFilter === "images") return item.is_dir || item.is_image;
         if (activeFilter === "media") return item.is_dir || item.is_audio || item.is_video;
@@ -155,9 +162,11 @@ function getItemActionButtons(item, isGrid = false) {
         if (item.is_image || item.is_audio || item.is_video) {
             btns += `<button class="btn btn-accent btn-small" onclick="openPreview('${escapeHtml(item.path)}', ${item.is_image}, ${item.is_audio}, ${item.is_video})">👁️ Preview</button>`;
         }
+        btns += `<button class="btn btn-secondary btn-small" onclick="copyDirectLink('${escapeHtml(item.path)}')" title="Copy Direct Link">🔗</button>`;
         btns += `<a href="/api/files/view/${encodeURIComponent(item.path)}" download class="btn btn-secondary btn-small">⬇️</a>`;
     }
     
+    btns += `<button class="btn btn-secondary btn-small" onclick="duplicateItem('${escapeHtml(item.path)}')" title="Duplicate Item">📋</button>`;
     btns += `<button class="btn btn-secondary btn-small" onclick="openRenameModal('${escapeHtml(item.path)}', '${escapeHtml(item.name)}')">✏️</button>`;
     btns += `<button class="btn btn-danger btn-small" onclick="deleteSingleItem('${escapeHtml(item.path)}')">🗑️</button>`;
     
@@ -232,6 +241,33 @@ function openPreview(path, isImage, isAudio, isVideo) {
     }
     
     openModal('preview-modal');
+}
+
+// File Duplication
+async function duplicateItem(path) {
+    try {
+        const res = await fetch('/api/files/copy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source_path: path })
+        });
+        if (!res.ok) throw new Error('Duplicate failed');
+        const data = await res.json();
+        
+        showToast(data.message);
+        fetchDirectoryContents(currentPath);
+    } catch (err) {
+        showToast(`Duplicate error: ${err.message}`, 'error');
+    }
+}
+
+function copyDirectLink(path) {
+    const fullUrl = `${window.location.origin}/api/files/view/${encodeURIComponent(path)}`;
+    navigator.clipboard.writeText(fullUrl).then(() => {
+        showToast('Direct URL copied to clipboard! 🔗');
+    }).catch(() => {
+        showToast('Failed to copy URL', 'error');
+    });
 }
 
 // Folder & File Creation
@@ -456,7 +492,18 @@ async function deleteSelectedItems() {
     }
 }
 
-// UI Filters & Views
+// UI Filters & Sorting
+function handleSortChange() {
+    sortBy = document.getElementById('sort-by-select').value;
+    fetchDirectoryContents(currentPath);
+}
+
+function toggleSortOrder() {
+    sortOrder = (sortOrder === 'asc') ? 'desc' : 'asc';
+    document.getElementById('sort-order-btn').textContent = (sortOrder === 'asc') ? '⬇️' : '⬆️';
+    fetchDirectoryContents(currentPath);
+}
+
 function setViewMode(mode) {
     viewMode = mode;
     document.getElementById('view-list-btn').classList.toggle('active', mode === 'list');

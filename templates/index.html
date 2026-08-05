@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Advanced Cloud File Manager & Web IDE deployable on Render, Railway, and Fly.io">
+    <meta name="description" content="Advanced Cloud File Manager & Web IDE v2.1 with Storage Gauge and Code Editor">
     <title>Advanced Cloud File Hub & IDE</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -30,7 +31,7 @@
             </div>
         </header>
 
-        <!-- Stats Bar -->
+        <!-- Stats Bar & Disk Space Gauge -->
         <div class="stats-grid">
             <div class="stat-card">
                 <span class="stat-label">System Status</span>
@@ -40,9 +41,15 @@
                 <span class="stat-label">Total Files</span>
                 <div class="stat-value" id="stat-files">0</div>
             </div>
-            <div class="stat-card">
-                <span class="stat-label">Storage Used</span>
-                <div class="stat-value" id="stat-storage">0 B</div>
+            <div class="stat-card storage-card">
+                <div class="storage-header">
+                    <span class="stat-label">Available System Disk Space</span>
+                    <span class="storage-percent" id="storage-percent">0%</span>
+                </div>
+                <div class="storage-gauge">
+                    <div class="storage-fill" id="storage-fill" style="width: 0%;"></div>
+                </div>
+                <div class="storage-subtext" id="stat-disk-subtext">Free: -- / Total: --</div>
             </div>
             <div class="stat-card">
                 <span class="stat-label">Port / Uptime</span>
@@ -60,14 +67,25 @@
                     <input type="file" id="file-input" multiple hidden>
                 </div>
                 
-                <div class="search-box">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" id="search-input" placeholder="Search files & folders..." oninput="handleSearch()">
-                </div>
+                <div class="toolbar-controls">
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="search-input" placeholder="Search files..." oninput="handleSearch()">
+                    </div>
 
-                <div class="view-toggles">
-                    <button class="icon-btn active" id="view-list-btn" onclick="setViewMode('list')" title="List View">📋</button>
-                    <button class="icon-btn" id="view-grid-btn" onclick="setViewMode('grid')" title="Grid View">🔲</button>
+                    <div class="sort-controls">
+                        <select id="sort-by-select" class="select-input" onchange="handleSortChange()">
+                            <option value="name">Sort: Name</option>
+                            <option value="size">Sort: Size</option>
+                            <option value="date">Sort: Date</option>
+                        </select>
+                        <button class="icon-btn" id="sort-order-btn" onclick="toggleSortOrder()" title="Toggle Ascending/Descending">⬇️</button>
+                    </div>
+
+                    <div class="view-toggles">
+                        <button class="icon-btn active" id="view-list-btn" onclick="setViewMode('list')" title="List View">📋</button>
+                        <button class="icon-btn" id="view-grid-btn" onclick="setViewMode('grid')" title="Grid View">🔲</button>
+                    </div>
                 </div>
             </div>
 
@@ -110,7 +128,7 @@
                         <input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this)">
                         <label for="select-all-checkbox">Select All</label>
                     </div>
-                    <button class="btn btn-secondary btn-small" onclick="fetchDirectoryContents()">🔄 Refresh</button>
+                    <button class="btn btn-secondary btn-small" onclick="fetchDirectoryContents(currentPath)">🔄 Refresh</button>
                 </div>
 
                 <div id="explorer-body" class="file-list-view">
@@ -198,6 +216,7 @@
     <!-- Toast Notifications -->
     <div id="toast-container" class="toast-container"></div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>
