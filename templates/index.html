@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Ultimate Web IDE & Cloud Suite v3.3 with Telegram Unlimited Storage">
+    <title>Ultimate Cloud Web IDE & Suite v3.3</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="theme-vscode">
+    <div class="background-glow"></div>
+    
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="brand">
+                <div class="logo">⚡</div>
+                <div>
+                    <h1>Ultimate Cloud Web IDE & Suite</h1>
+                    <p class="subtitle">Python FastAPI • Telegram Unlimited Cloud Storage Enabled</p>
+                </div>
+            </div>
+            <div class="cloud-badges">
+                <span class="badge telegram" id="tg-status-badge">✈️ Telegram Cloud</span>
+                <span class="badge render">Render</span>
+                <span class="badge railway">Railway</span>
+                <span class="badge fly">Fly.io</span>
+            </div>
+        </header>
+
+        <!-- Stats Bar: System Status, Disk Gauge, CPU & RAM Gauges -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-label">System Status</span>
+                <div class="stat-value online" id="stat-status">Checking...</div>
+            </div>
+            <div class="stat-card storage-card">
+                <div class="storage-header">
+                    <span class="stat-label">Available Disk Space</span>
+                    <span class="storage-percent" id="storage-percent">0%</span>
+                </div>
+                <div class="storage-gauge">
+                    <div class="storage-fill" id="storage-fill" style="width: 0%;"></div>
+                </div>
+                <div class="storage-subtext" id="stat-disk-subtext">Free: -- / Total: --</div>
+            </div>
+            <div class="stat-card">
+                <div class="storage-header">
+                    <span class="stat-label">CPU Usage</span>
+                    <span class="storage-percent" id="cpu-percent">0%</span>
+                </div>
+                <div class="storage-gauge">
+                    <div class="storage-fill cpu-fill" id="cpu-fill" style="width: 0%;"></div>
+                </div>
+                <div class="storage-subtext" id="stat-files">Files: 0</div>
+            </div>
+            <div class="stat-card">
+                <div class="storage-header">
+                    <span class="stat-label">RAM Usage</span>
+                    <span class="storage-percent" id="ram-percent">0%</span>
+                </div>
+                <div class="storage-gauge">
+                    <div class="storage-fill ram-fill" id="ram-fill" style="width: 0%;"></div>
+                </div>
+                <div class="storage-subtext" id="stat-ram-subtext">Used: -- / --</div>
+            </div>
+        </div>
+
+        <!-- Toolbar Section -->
+        <div class="card toolbar-card">
+            <div class="toolbar-top">
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="openModal('new-folder-modal')">📁 New Folder</button>
+                    <button class="btn btn-primary" onclick="openModal('new-file-modal')">📝 New File</button>
+                    <label for="file-input" class="btn btn-accent">☁️ Upload Files</label>
+                    <button class="btn btn-telegram" onclick="openTelegramModal()">✈️ Connect Telegram Cloud</button>
+                    <button class="btn btn-secondary" onclick="openModal('grep-search-modal')">🔍 Grep Search</button>
+                    <button class="btn btn-secondary" onclick="openGitModal()">🐙 Git Client</button>
+                    <button class="btn btn-secondary" onclick="toggleTerminal()">>_ Web Terminal</button>
+                    <input type="file" id="file-input" multiple hidden>
+                </div>
+                
+                <div class="toolbar-controls">
+                    <!-- Theme Selector -->
+                    <select id="theme-select" class="select-input" onchange="handleThemeChange(this.value)">
+                        <option value="theme-vscode">🎨 VS Code Dark</option>
+                        <option value="theme-monokai">🎨 Monokai</option>
+                        <option value="theme-dracula">🎨 Dracula</option>
+                        <option value="theme-onedark">🎨 One Dark</option>
+                        <option value="theme-cyberpunk">🎨 Cyberpunk</option>
+                    </select>
+
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="search-input" placeholder="Search filenames..." oninput="handleSearch()">
+                    </div>
+
+                    <div class="sort-controls">
+                        <select id="sort-by-select" class="select-input" onchange="handleSortChange()">
+                            <option value="name">Sort: Name</option>
+                            <option value="size">Sort: Size</option>
+                            <option value="date">Sort: Date</option>
+                        </select>
+                        <button class="icon-btn" id="sort-order-btn" onclick="toggleSortOrder()" title="Toggle Ascending/Descending">⬇️</button>
+                    </div>
+
+                    <div class="view-toggles">
+                        <button class="icon-btn active" id="view-list-btn" onclick="setViewMode('list')" title="List View">📋</button>
+                        <button class="icon-btn" id="view-grid-btn" onclick="setViewMode('grid')" title="Grid View">🔲</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Progress Bar Component -->
+            <div id="upload-progress-container" class="upload-progress-card" style="display: none;">
+                <div class="upload-progress-header">
+                    <span id="upload-filename-text" class="upload-filename">Uploading files...</span>
+                    <span id="upload-percent-text" class="upload-percent">0%</span>
+                </div>
+                <div class="upload-progress-track">
+                    <div id="upload-progress-bar" class="upload-progress-fill" style="width: 0%;"></div>
+                </div>
+                <div class="upload-progress-footer">
+                    <span id="upload-bytes-text" class="upload-bytes">0 B / 0 B</span>
+                    <span class="upload-status-text">✈️ Telegram Cloud Stream</span>
+                </div>
+            </div>
+
+            <!-- Filter Tags -->
+            <div class="filter-tags">
+                <button class="filter-pill active" onclick="setFilter('all', this)">All Items</button>
+                <button class="filter-pill" onclick="setFilter('code', this)">💻 Code</button>
+                <button class="filter-pill" onclick="setFilter('images', this)">🖼️ Images</button>
+                <button class="filter-pill" onclick="setFilter('media', this)">🎬 Media</button>
+                <button class="filter-pill" onclick="setFilter('docs', this)">📄 Documents</button>
+                <button class="filter-pill" onclick="setFilter('archives', this)">📦 Archives</button>
+            </div>
+        </div>
+
+        <!-- Breadcrumb Navigation & Batch Bar -->
+        <div class="nav-bar">
+            <div class="breadcrumbs" id="breadcrumbs">
+                <!-- Dynamic breadcrumbs rendered here -->
+            </div>
+            <div class="batch-bar" id="batch-bar" style="display: none;">
+                <span id="batch-count">0 items selected</span>
+                <button class="btn btn-small btn-secondary" onclick="downloadSelectedZip()">📦 Download ZIP</button>
+                <button class="btn btn-small btn-danger" onclick="deleteSelectedItems()">🗑️ Delete Selected</button>
+            </div>
+        </div>
+
+        <!-- Main Workspace Grid/List -->
+        <main class="main-content">
+            <!-- Drop Target Overlay -->
+            <div class="drop-zone-wrapper card" id="drop-zone-wrapper">
+                <div class="drop-zone" id="drop-zone">
+                    <p>Drag & drop files anywhere to upload to current directory</p>
+                </div>
+            </div>
+
+            <!-- File Explorer Container -->
+            <div class="card explorer-card">
+                <div class="explorer-header">
+                    <div class="select-all-box">
+                        <input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this)">
+                        <label for="select-all-checkbox">Select All</label>
+                    </div>
+                    <button class="btn btn-secondary btn-small" onclick="fetchDirectoryContents(currentPath)">🔄 Refresh</button>
+                </div>
+
+                <div id="explorer-body" class="file-list-view">
+                    <div class="empty-state">Loading directory...</div>
+                </div>
+            </div>
+
+            <!-- Web Terminal Drawer -->
+            <div class="card terminal-card" id="terminal-drawer" style="display: none;">
+                <div class="terminal-header">
+                    <div class="terminal-title">
+                        <span>>_ Web Terminal</span>
+                        <span class="terminal-cwd" id="terminal-cwd-badge">uploads/</span>
+                    </div>
+                    <div class="terminal-actions">
+                        <button class="btn btn-secondary btn-small" onclick="runQuickCommand('python --version')">python --version</button>
+                        <button class="btn btn-secondary btn-small" onclick="runQuickCommand('pip list')">pip list</button>
+                        <button class="btn btn-secondary btn-small" onclick="clearTerminalLogs()">Clear</button>
+                        <button class="btn btn-secondary btn-small" onclick="toggleTerminal()">✖ Close</button>
+                    </div>
+                </div>
+                
+                <div class="terminal-console" id="terminal-console">
+                    <div class="terminal-line log-system">Welcome to Ultimate Web IDE Web Terminal v3.3</div>
+                    <div class="terminal-line log-system">Run shell commands, execute Python scripts (`python script.py`), or check server info.</div>
+                </div>
+
+                <div class="terminal-input-bar">
+                    <span class="terminal-prompt">$</span>
+                    <input type="text" id="terminal-cmd-input" class="terminal-input" placeholder="Type shell command (e.g. python script.py, ls, pwd) and press Enter..." onkeydown="handleTerminalKeyDown(event)">
+                    <button class="btn btn-primary btn-small" onclick="submitTerminalCommand()">Run</button>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>API Endpoint: <a href="/docs" target="_blank" class="api-link">Swagger Docs (/docs)</a> • Health: <a href="/healthz" target="_blank" class="api-link">/healthz</a></p>
+        </footer>
+    </div>
+
+    <!-- Modals -->
+
+    <!-- Telegram Cloud Connector Modal -->
+    <div class="modal-overlay" id="telegram-modal">
+        <div class="modal-card">
+            <h3>✈️ Connect Telegram Unlimited Cloud Storage</h3>
+            <p class="editor-subtext" style="margin-bottom: 0.8rem;">Files uploaded will be stored in Telegram Cloud (100% Free & Permanent forever, up to 2GB per file)!</p>
+            <label class="stat-label">Telegram Bot Token (from @BotFather)</label>
+            <input type="text" id="tg-bot-token-input" class="modal-input" placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz">
+            
+            <label class="stat-label">Telegram Chat ID / Channel ID (Optional)</label>
+            <input type="text" id="tg-chat-id-input" class="modal-input" placeholder="@yourchannel or -100123456789">
+            
+            <div id="tg-connection-info" style="margin: 0.5rem 0; font-size: 0.85rem;"></div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('telegram-modal')">Cancel</button>
+                <button class="btn btn-telegram" onclick="submitTelegramConfig()">✈️ Connect Telegram Storage</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Full-Text Grep Search Modal -->
+    <div class="modal-overlay" id="grep-search-modal">
+        <div class="modal-card modal-large">
+            <div class="editor-header">
+                <h3>🔍 Full-Text Code Search (Grep)</h3>
+                <button class="btn btn-secondary" onclick="closeModal('grep-search-modal')">Close</button>
+            </div>
+            <div class="search-input-group">
+                <input type="text" id="grep-query-input" class="modal-input" placeholder="Search keywords, functions, or variables across all code files..." onkeydown="if(event.key==='Enter') submitGrepSearch()">
+                <button class="btn btn-primary" onclick="submitGrepSearch()">Search Code</button>
+            </div>
+            <div class="grep-results-container" id="grep-results-list">
+                <div class="empty-state">Enter a search keyword above.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Git Client Modal -->
+    <div class="modal-overlay" id="git-modal">
+        <div class="modal-card modal-large">
+            <div class="editor-header">
+                <h3>🐙 In-Browser Git Client</h3>
+                <div class="editor-actions">
+                    <button class="btn btn-secondary" onclick="fetchGitStatus()">🔄 Refresh Status</button>
+                    <button class="btn btn-secondary" onclick="closeModal('git-modal')">Close</button>
+                </div>
+            </div>
+            <div class="git-container">
+                <div class="git-status-box">
+                    <h4>Git Status</h4>
+                    <pre id="git-status-output" class="code-textarea git-pre">Loading git status...</pre>
+                </div>
+                <div class="git-actions-box card">
+                    <h4>Commit & Push</h4>
+                    <input type="text" id="git-commit-msg" class="modal-input" placeholder="Commit message (e.g. Update feature)">
+                    <div class="modal-actions">
+                        <button class="btn btn-primary" onclick="submitGitCommit()">git commit</button>
+                        <button class="btn btn-accent" onclick="submitGitPush()">git push</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SQLite Database Viewer Modal -->
+    <div class="modal-overlay" id="db-modal">
+        <div class="modal-card modal-large">
+            <div class="editor-header">
+                <h3 id="db-title">📊 SQLite Database Browser</h3>
+                <button class="btn btn-secondary" onclick="closeModal('db-modal')">Close</button>
+            </div>
+            <div class="db-container">
+                <div class="db-tables-bar" id="db-tables-list">
+                    <span>Tables: Loading...</span>
+                </div>
+                <div class="sql-query-bar">
+                    <input type="text" id="sql-query-input" class="modal-input" placeholder="SELECT * FROM table_name LIMIT 50;">
+                    <button class="btn btn-primary" onclick="submitSqlQuery()">Run SQL Query</button>
+                </div>
+                <div class="db-table-wrapper" id="db-results-grid">
+                    <div class="empty-state">Select a table or run an SQL query.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Folder Modal -->
+    <div class="modal-overlay" id="new-folder-modal">
+        <div class="modal-card">
+            <h3>📁 Create New Folder</h3>
+            <input type="text" id="new-folder-name" class="modal-input" placeholder="Folder name (e.g. documents)">
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('new-folder-modal')">Cancel</button>
+                <button class="btn btn-primary" onclick="submitCreateFolder()">Create Folder</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New File Modal -->
+    <div class="modal-overlay" id="new-file-modal">
+        <div class="modal-card">
+            <h3>📝 Create New Text File</h3>
+            <input type="text" id="new-file-name" class="modal-input" placeholder="File name (e.g. script.py, index.js)">
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('new-file-modal')">Cancel</button>
+                <button class="btn btn-primary" onclick="submitCreateFile()">Create File</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Code Editor Modal -->
+    <div class="modal-overlay" id="editor-modal">
+        <div class="modal-card modal-large">
+            <div class="editor-header">
+                <div>
+                    <h3 id="editor-title">Editing: file.txt</h3>
+                    <span class="editor-subtext" id="editor-path">uploads/file.txt</span>
+                </div>
+                <div class="editor-actions">
+                    <button class="btn btn-primary" id="run-script-btn" onclick="runCurrentScript()">▶️ Run Script</button>
+                    <button class="btn btn-accent" onclick="saveEditorContent()">💾 Save Changes</button>
+                    <button class="btn btn-secondary" onclick="closeModal('editor-modal')">Close</button>
+                </div>
+            </div>
+            <div class="editor-container">
+                <textarea id="code-editor" class="code-textarea" spellcheck="false"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- Media Preview Modal -->
+    <div class="modal-overlay" id="preview-modal">
+        <div class="modal-card modal-large">
+            <div class="preview-header">
+                <h3 id="preview-title">File Preview</h3>
+                <button class="btn btn-secondary" onclick="closeModal('preview-modal')">Close</button>
+            </div>
+            <div class="preview-content" id="preview-content-body">
+                <!-- Dynamic Image, Audio, Video preview -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Rename Modal -->
+    <div class="modal-overlay" id="rename-modal">
+        <div class="modal-card">
+            <h3>✏️ Rename Item</h3>
+            <input type="text" id="rename-new-name" class="modal-input" placeholder="New name">
+            <input type="hidden" id="rename-old-path">
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('rename-modal')">Cancel</button>
+                <button class="btn btn-primary" onclick="submitRename()">Rename</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="/static/js/app.js?v=3.3"></script>
+</body>
+</html>
